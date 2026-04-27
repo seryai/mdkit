@@ -194,6 +194,11 @@ impl Engine {
     /// can log "PDF support disabled: libpdfium not found" rather
     /// than silently shipping a degraded experience.
     pub fn with_defaults_diagnostic() -> (Self, Vec<(&'static str, Error)>) {
+        // `mut` is conditionally needed: when --no-default-features is
+        // set and no optional backends are enabled, neither `engine`
+        // nor `errors` ever gets a mutating call. The allow keeps that
+        // valid configuration buildable under -D warnings.
+        #[allow(unused_mut)]
         let mut engine = Self::new();
         #[allow(unused_mut)]
         let mut errors: Vec<(&'static str, Error)> = Vec::new();

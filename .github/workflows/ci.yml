@@ -58,11 +58,15 @@ jobs:
         run: cargo clippy --all-features --all-targets -- -D warnings
 
   msrv:
-    name: MSRV (rust 1.82)
+    # Bumped to 1.85 in v0.5.2: indexmap 2.14 (transitive via html2md /
+    # calamine / pdfium-render) requires `edition = "2024"`, which was
+    # only stabilised in Rust 1.85. Anything older fails to even parse
+    # its Cargo.toml.
+    name: MSRV (rust 1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.82
+      - uses: dtolnay/rust-toolchain@1.85
       - uses: Swatinem/rust-cache@v2
       - name: Build on MSRV
         run: cargo build --verbose
