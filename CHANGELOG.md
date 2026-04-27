@@ -11,6 +11,31 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-04-27
+
+### Fixed
+
+- **`VisionOcrExtractor` returned empty markdown for valid images.**
+  v0.5.0 loaded each image via `NSImage::initWithContentsOfURL`, then
+  rasterized to a `CGImage` through
+  `CGImageForProposedRect_context_hints`, then handed the `CGImage` to
+  `VNImageRequestHandler::initWithCGImage_options`. The pipeline ran
+  without error, but Vision found zero text observations on every
+  input — the multi-step conversion was silently producing a CGImage
+  Vision couldn't read. v0.5.1 switches to
+  `VNImageRequestHandler::initWithURL_options`, which lets Vision
+  load the file directly via Image I/O. Confirmed end-to-end on a
+  PNG: Vision now returns the expected text at confidence 1.0.
+
+### Changed
+
+- Dropped the NSImage / CGImage extraction step from
+  `src/ocr_macos.rs`. The `objc2-app-kit` and `objc2-core-graphics`
+  crates are still pulled in by the `ocr-platform` feature for
+  forward compatibility, but the OCR backend itself no longer touches
+  either — the `VNImageRequestHandler::initWithURL_options` path goes
+  straight from filesystem URL to Vision request.
+
 ## [0.5.0] — 2026-04-27
 
 ### Added
@@ -190,7 +215,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdkit-project/mdkit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mdkit-project/mdkit/compare/v0.2.0...v0.3.0
