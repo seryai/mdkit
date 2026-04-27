@@ -4,11 +4,13 @@
 Tauri / Iced / native desktop apps that want best-in-class document
 extraction without a 350 MB Python sidecar.
 
-> **Status:** v0.3 — PDF (Pdfium) and Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
-> LaTeX/HTML) backends shipped. The trait surface + dispatch engine
-> are stable; OCR + spreadsheet backends land incrementally per the
-> roadmap below. Not yet recommended for production use. Watch / star
-> the repo to follow along.
+> **Status:** v0.4 — PDF (Pdfium), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
+> LaTeX), spreadsheets (calamine for XLSX/XLS/XLSB/XLSM/ODS), CSV/TSV,
+> and HTML (in-process via html2md, with Pandoc as fallback) all
+> shipped. The trait surface + dispatch engine are stable; OCR
+> backends land in v0.5/v0.6. Not yet recommended for production use,
+> but feature coverage is approaching parity with Python markitdown
+> for non-OCR formats. Watch / star the repo to follow along.
 
 ## Why this exists
 
@@ -140,7 +142,11 @@ roadmap below:
       registers when `pandoc` is on PATH; supports
       `with_binary(absolute_path)` for shipping pandoc next to your
       app. CHANGELOG.md added.
-- [ ] v0.4 — `calamine` + `csv` + `html` features (in-process)
+- [x] **v0.4 — `calamine` + `csv` + `html` features (all in-process).**
+      `CalamineExtractor` (XLSX/XLS/XLSB/XLSM/ODS), `CsvExtractor`
+      (CSV/TSV with auto-delimiter), `Html2mdExtractor` (HTML/HTM,
+      registered before Pandoc so it wins by default for HTML).
+      Engine registration order documented inline.
 - [ ] v0.5 — `ocr-platform` feature (macOS Vision, Windows.Media.Ocr)
 - [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
 - [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)

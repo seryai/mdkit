@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["mdkit contributors"]
@@ -24,9 +24,9 @@ default = ["pdf", "calamine", "csv", "html"]
 
 # In-process Rust backends.
 pdf      = ["dep:pdfium-render"]   # PDF text via Google Pdfium (libpdfium required at runtime)
-calamine = []                       # placeholder; pulls in calamine in v0.4
-csv      = []                       # placeholder; pulls in csv in v0.4
-html     = []                       # placeholder; pulls in html2md in v0.4
+calamine = ["dep:calamine"]         # XLSX / XLS / XLSB / ODS spreadsheets
+csv      = ["dep:csv"]              # CSV / TSV
+html     = ["dep:html2md"]          # HTML / HTM (lighter alternative to Pandoc for HTML)
 
 # Sidecar backend — shells out to the `pandoc` binary on PATH (or a
 # caller-provided absolute path via PandocExtractor::with_binary).
@@ -49,6 +49,9 @@ thiserror = "2"
 # the minimum surface mdkit consumes — keeps the dependency graph
 # small for downstream consumers.
 pdfium-render = { version = "0.9", optional = true, default-features = false, features = ["thread_safe", "pdfium_latest"] }
+calamine      = { version = "0.34", optional = true }
+csv           = { version = "1", optional = true }
+html2md       = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

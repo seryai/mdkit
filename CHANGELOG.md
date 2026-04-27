@@ -11,6 +11,48 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-27
+
+### Added
+
+- **`CalamineExtractor`** — XLSX, XLS, XLSB, XLSM, ODS spreadsheet
+  extraction via the [`calamine`](https://crates.io/crates/calamine)
+  crate (gated by the `calamine` feature). Each worksheet renders as
+  a markdown table preceded by an `## ` heading with the sheet name;
+  ragged rows pad/truncate to the header column count to keep the
+  table well-formed.
+- **`CsvExtractor`** — CSV and TSV extraction via the
+  [`csv`](https://crates.io/crates/csv) crate (gated by the `csv`
+  feature). Auto-selects tab delimiter for `.tsv` files. First row
+  treated as the header row; data rendered as a markdown table.
+- **`Html2mdExtractor`** — HTML and HTM extraction via the
+  [`html2md`](https://crates.io/crates/html2md) crate (gated by the
+  `html` feature). Lighter and faster than the Pandoc HTML reader;
+  registered before Pandoc in `Engine::with_defaults` so it wins for
+  HTML files when both features are enabled.
+- All three extractors implement the new pattern: `Default + new()`
+  infallible constructors (no runtime dependency to verify), so they
+  register unconditionally in `Engine::with_defaults` when their
+  feature flag is on.
+
+### Changed
+
+- **Backend registration order in `Engine::with_defaults`** — cheap
+  in-process Rust backends (PDF, calamine, csv, html2md) register
+  before the Pandoc sidecar, so when format coverage overlaps (HTML
+  is the only one today, but future formats may too), the in-process
+  backend wins. Documented inline in `src/lib.rs`.
+- README + roadmap reflect v0.4 ship.
+
+### Notes
+
+- Pipe characters (`|`) in spreadsheet/CSV cell values are escaped to
+  `&#124;` to keep markdown tables well-formed; embedded newlines
+  collapse to a single space for the same reason.
+- The `csv` crate is referenced via `::csv::` in `src/csv.rs` to
+  disambiguate from the local module of the same name. Module name
+  matches the feature name for consistency with the other backends.
+
 ## [0.3.0] — 2026-04-27
 
 ### Added
@@ -102,7 +144,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mdkit-project/mdkit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mdkit-project/mdkit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mdkit-project/mdkit/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mdkit-project/mdkit/releases/tag/v0.1.0

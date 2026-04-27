@@ -51,6 +51,15 @@ pub use error::{Error, Result};
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
+#[cfg(feature = "calamine")]
+pub mod calamine;
+
+#[cfg(feature = "csv")]
+pub mod csv;
+
+#[cfg(feature = "html")]
+pub mod html;
+
 #[cfg(feature = "pandoc")]
 pub mod pandoc;
 
@@ -176,6 +185,16 @@ impl Engine {
         #[allow(unused_mut)]
         let mut errors: Vec<(&'static str, Error)> = Vec::new();
 
+        // Registration order matters: the Engine dispatcher returns
+        // the FIRST registered extractor that claims a given file
+        // extension. We register cheap in-process Rust backends first
+        // so they win over the (heavier) Pandoc sidecar for any
+        // overlapping format — most importantly HTML, which both
+        // Html2mdExtractor and PandocExtractor handle. Pandoc is the
+        // last registered, so it picks up DOCX/PPTX/EPUB/RTF/ODT/LaTeX
+        // (which nothing else handles) and ALSO acts as the fallback
+        // HTML reader if the `html` feature is disabled.
+
         #[cfg(feature = "pdf")]
         {
             match crate::pdf::PdfiumExtractor::new() {
@@ -184,6 +203,21 @@ impl Engine {
                 }
                 Err(e) => errors.push(("pdf", e)),
             }
+        }
+
+        #[cfg(feature = "calamine")]
+        {
+            engine.register(Box::new(crate::calamine::CalamineExtractor::new()));
+        }
+
+        #[cfg(feature = "csv")]
+        {
+            engine.register(Box::new(crate::csv::CsvExtractor::new()));
+        }
+
+        #[cfg(feature = "html")]
+        {
+            engine.register(Box::new(crate::html::Html2mdExtractor::new()));
         }
 
         #[cfg(feature = "pandoc")]
