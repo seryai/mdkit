@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 rust-version = "1.88"
 authors = ["mdkit contributors"]
@@ -20,13 +20,14 @@ exclude = [
 [features]
 # The default set is the in-process Rust backends — no sidecar binaries
 # to bundle, no platform-specific FFI. Adds ~7 MB to a release build.
-default = ["pdf", "calamine", "csv", "html"]
+default = ["pdf", "calamine", "csv", "html", "ipynb"]
 
 # In-process Rust backends.
 pdf      = ["dep:pdfium-render", "dep:tempfile"]  # PDF text via Google Pdfium (libpdfium required at runtime); tempfile spools pages for OCR fallback
 calamine = ["dep:calamine"]         # XLSX / XLS / XLSB / ODS spreadsheets
 csv      = ["dep:csv"]              # CSV / TSV
 html     = ["dep:html2md"]          # HTML / HTM (lighter alternative to Pandoc for HTML)
+ipynb    = ["dep:serde_json"]       # Jupyter notebooks (.ipynb) — pure-Rust JSON parse, no external deps
 
 # Sidecar backend — shells out to the `pandoc` binary on PATH (or a
 # caller-provided absolute path via PandocExtractor::with_binary).
@@ -50,7 +51,7 @@ ocr-onnx     = ["dep:oar-ocr", "dep:image"]
 ocr-onnx-download = ["ocr-onnx", "oar-ocr/download-binaries"]
 
 # Build-everything convenience for downstream tests.
-full = ["pdf", "pandoc", "ocr-platform", "ocr-onnx-download", "calamine", "csv", "html"]
+full = ["pdf", "pandoc", "ocr-platform", "ocr-onnx-download", "calamine", "csv", "html", "ipynb"]
 
 [dependencies]
 thiserror = "2"
@@ -63,6 +64,10 @@ pdfium-render = { version = "0.9", optional = true, default-features = false, fe
 calamine      = { version = "0.34", optional = true }
 csv           = { version = "1", optional = true }
 html2md       = { version = "0.2", optional = true }
+# Jupyter notebooks (.ipynb) are JSON; parse directly with serde_json.
+# No other JSON-handling code in mdkit consumes this — it stays gated
+# behind the `ipynb` feature so backends that don't need it pay nothing.
+serde_json    = { version = "1", optional = true }
 # Used by PdfiumExtractor's scanned-PDF → OCR fallback (v0.5.3) to
 # spool rendered page PNGs into a per-call TempDir before handing them
 # to a registered OCR extractor. Only pulled in when the `pdf`

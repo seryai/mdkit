@@ -11,6 +11,42 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-04-27
+
+### Added
+
+- **`IpynbExtractor`** — Jupyter notebook (`.ipynb`) extraction.
+  Pure-Rust JSON parse via `serde_json`; no external runtime
+  dependency. Walks notebook cells in order:
+  - `markdown` cells → emitted verbatim
+  - `code` cells → wrapped in fenced code blocks; language hint
+    pulled from `metadata.kernelspec.language` (preferred) or
+    `metadata.language_info.name` (fallback)
+  - `raw` cells → emitted verbatim per spec §"Raw NBConvert cells"
+  - Unknown cell types → emitted as opaque text (forward-compat
+    for future nbformat versions)
+  - Whitespace-only / empty cells → skipped
+- New `ipynb` feature flag (in the default set — pure-Rust, no
+  binary deps, ~50 lines + serde_json transitive).
+- `Document.metadata` keys when extracting notebooks:
+  `kernel_language` (e.g. `"python"`), `kernel_display_name`
+  (e.g. `"Python 3"`). `Document.title` populated from
+  `metadata.title` when set.
+- Cell `source` field handles both shapes the spec allows: a single
+  string, OR an array of strings (one per line, joined with no
+  separator since each line keeps its trailing `\n` — the
+  diff-friendly on-disk form).
+
+### Notes
+
+- Cell **outputs** are intentionally NOT included in the markdown
+  body. They're typically large (image data URLs, repr blobs) and
+  not what callers indexing notebooks for search / RAG want. A
+  future "rich extraction" trait could expose them.
+- Closes the last format-coverage gap that Sery Link's integration
+  needed (DOCX, PPTX, PDF, HTML, IPYNB) — v0.7.2 unblocks the
+  Python-sidecar replacement work.
+
 ## [0.7.1] — 2026-04-27
 
 ### Changed
@@ -645,7 +681,8 @@ docs / API audit pass, then 1.0.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/seryai/mdkit/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/seryai/mdkit/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/seryai/mdkit/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/seryai/mdkit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/seryai/mdkit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/seryai/mdkit/compare/v0.5.6...v0.6.0

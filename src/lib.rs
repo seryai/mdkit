@@ -95,6 +95,9 @@ pub mod csv;
 #[cfg(feature = "html")]
 pub mod html;
 
+#[cfg(feature = "ipynb")]
+pub mod ipynb;
+
 #[cfg(feature = "pandoc")]
 pub mod pandoc;
 
@@ -313,6 +316,11 @@ impl Engine {
         #[cfg(feature = "html")]
         {
             engine.register(Box::new(crate::html::Html2mdExtractor::new()));
+        }
+
+        #[cfg(feature = "ipynb")]
+        {
+            engine.register(Box::new(crate::ipynb::IpynbExtractor::new()));
         }
 
         #[cfg(all(feature = "ocr-platform", target_os = "macos"))]

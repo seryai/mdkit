@@ -41,6 +41,7 @@ The composition we ship by default:
 | XLSX, XLS, ODS | [`calamine`][calamine] | Already the Rust ecosystem standard. |
 | CSV, TSV | [`csv`][csv] | Stdlib-quality. |
 | HTML | [`html2md`][html2md] (or Pandoc, configurable) | Default cheap, optional best. |
+| Jupyter (IPYNB) | Built-in via `serde_json` | Pure-Rust JSON parse, no external deps. ~50 lines. |
 
 Total binary size with all backends: **~50-200 MB** depending on
 which optional features you enable, vs ~350 MB for a Python
@@ -119,7 +120,8 @@ mdkit = { version = "0.1", features = ["pdf", "pandoc", "ocr-platform", "calamin
 | `calamine` | XLSX / XLS / ODS via `calamine` | ~1 MB |
 | `csv` | CSV / TSV | <1 MB |
 | `html` | HTML via `html2md` | <1 MB |
-| `default` | `pdf`, `calamine`, `csv`, `html` (the in-process Rust ones) | ~7 MB |
+| `ipynb` | Jupyter notebooks via `serde_json` | <1 MB |
+| `default` | `pdf`, `calamine`, `csv`, `html`, `ipynb` (the in-process Rust ones) | ~7 MB |
 
 Not enabling `pandoc` or `ocr-platform` is fine — extractors for those
 formats simply won't be registered, and `Engine::extract` will return
