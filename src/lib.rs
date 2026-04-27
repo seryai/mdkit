@@ -38,6 +38,41 @@
 //! let mut engine = Engine::new();
 //! engine.register(Box::new(MyParser));
 //! ```
+//!
+//! ## Stability commitment (v0.7+)
+//!
+//! v0.7 marks the **API stability candidate** for 1.0. The following
+//! surface is committed to and will only change with a major version
+//! bump:
+//!
+//! - The [`Extractor`] trait shape — required methods, default
+//!   implementations, `Send + Sync` bound.
+//! - [`Engine`] construction and dispatch methods — `new`,
+//!   `with_defaults`, `with_defaults_diagnostic`, `register`,
+//!   `extract`, `extract_bytes`, `len`, `is_empty`.
+//! - [`Document`] field set + [`Document::new`]. Marked
+//!   `#[non_exhaustive]` so we can add fields (page count, language,
+//!   confidence) without major bumps.
+//! - [`Error`] enum semantics. Marked `#[non_exhaustive]` so we can
+//!   add variants (e.g. encrypted-document) without major bumps.
+//!   Pattern-matchers must include a wildcard arm.
+//! - Feature flag names: `pdf`, `pandoc`, `calamine`, `csv`, `html`,
+//!   `ocr-platform`, `ocr-onnx`, `ocr-onnx-download`, `full`.
+//! - Backend `name()` strings — used by callers for filtering /
+//!   logging. Stable per release line.
+//!
+//! The following are **implementation details** and may change in
+//! minor versions:
+//!
+//! - The internal layout of any specific extractor (private fields,
+//!   helper methods).
+//! - The exact set of `Document.metadata` keys per backend (new
+//!   keys may appear; existing documented keys stay).
+//! - Auto-registration order in `Engine::with_defaults` (when
+//!   multiple backends claim overlapping extensions; documented
+//!   priority stays).
+//! - Internal sidecar / FFI details (Pandoc's `--server` mode, ONNX
+//!   runtime version).
 
 #![doc(html_root_url = "https://docs.rs/mdkit")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -93,7 +128,14 @@ pub mod ocr_onnx;
 /// The result of extracting one document. Markdown is always present;
 /// title and metadata are best-effort and may be empty depending on the
 /// backend.
+///
+/// Marked `#[non_exhaustive]` so future minor versions can add fields
+/// (page count, language detection, structured metadata, confidence
+/// scores) without breaking downstream struct-literal construction.
+/// Build via [`Document::new`] then mutate fields; the public field
+/// access pattern still works.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct Document {
     /// The extracted markdown text.
     pub markdown: String,
@@ -109,6 +151,7 @@ pub struct Document {
 impl Document {
     /// Convenience constructor for the common case where you only have
     /// markdown text.
+    #[must_use]
     pub fn new(markdown: impl Into<String>) -> Self {
         Self {
             markdown: markdown.into(),
@@ -180,6 +223,7 @@ pub struct Engine {
 impl Engine {
     /// New engine with no extractors registered. Useful when you want
     /// full control over the backend set.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             extractors: Vec::new(),
@@ -194,6 +238,7 @@ impl Engine {
     /// you want to surface those failures to the user.
     ///
     /// [`with_defaults_diagnostic`]: Self::with_defaults_diagnostic
+    #[must_use]
     pub fn with_defaults() -> Self {
         let (engine, _errors) = Self::with_defaults_diagnostic();
         engine

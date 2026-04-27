@@ -11,6 +11,99 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-04-27
+
+### API stability candidate (1.0 prep)
+
+v0.7 is the **API stability candidate** for 1.0. The format-coverage
+roadmap closed in v0.6 — every major desktop format and OCR backend
+ships. v0.7 freezes the public surface ahead of 1.0 and locks in
+SemVer commitments. v0.7.x can iterate on examples, docs polish, and
+niche backend additions without changing the public API shape.
+
+### Added
+
+- **Stability section in `lib.rs` module docs** explicitly enumerates
+  what's covered by the API freeze (Extractor trait, Engine
+  dispatch surface, Document fields, Error semantics, feature flag
+  names, backend `name()` strings) and what stays implementation
+  detail (private extractor layout, exact metadata key sets,
+  registration order, sidecar / FFI internals).
+- `#[non_exhaustive]` on [`Error`] — pre-1.0 we may add variants
+  (e.g. `EncryptedDocument` when password-protected PDFs land), and
+  this attribute lets us do that without a major version bump.
+  **Pattern-matchers must include a wildcard arm.**
+- `#[non_exhaustive]` on [`Document`] — same forward-compat
+  rationale. Future fields (page count, language detection,
+  confidence, structured metadata) can land in minor versions
+  without breaking downstream struct-literal construction.
+  Construct via [`Document::new`] and then mutate fields; public
+  field access still works.
+- `#[must_use]` annotations on `Document::new`, `Engine::new`, and
+  `Engine::with_defaults` — catches the "constructed but never used"
+  bug at compile time. Most existing extractor constructors already
+  had `#[must_use]`; this completes the audit.
+
+### Changed
+
+- No API-shape changes. v0.7.0 is intentionally an attribute-only
+  release — it's safe to bump from v0.6.x with no code changes
+  required, except where downstream code constructs `Document` /
+  matches on `Error` via struct/enum literals (in which case the
+  compiler will guide the migration).
+
+### Migration from v0.6.x
+
+For most callers: bump the dependency, rebuild, ship. No code
+changes needed.
+
+For callers constructing `Document` via struct literal in another
+crate:
+
+```rust
+// Before
+Document {
+    markdown: "...".into(),
+    title: None,
+    metadata: HashMap::new(),
+}
+
+// After
+let mut doc = Document::new("...");
+doc.title = None;          // optional — these are the defaults
+doc.metadata.clear();      // optional
+```
+
+For callers exhaustively matching on `Error`:
+
+```rust
+// Before
+match err {
+    Error::Io(_) => ...,
+    Error::ParseError(_) => ...,
+    // ... every variant
+}
+
+// After
+match err {
+    Error::Io(_) => ...,
+    Error::ParseError(_) => ...,
+    // ... every variant
+    _ => panic!("new mdkit error variant — check the changelog"),
+}
+```
+
+### Notes
+
+- v0.7.x will iterate on **examples** (`examples/` directory),
+  **cookbook**-style docs ("how to register a custom extractor",
+  "extending the Engine"), and any **niche backend polish** that
+  doesn't change the public surface (Pandoc `--server` mode,
+  Windows OCR auto-downscale via `BitmapTransform`).
+- 1.0 will be cut once the API is exercised by at least one
+  downstream production user (Sery Link is the canonical
+  integration target).
+
 ## [0.6.0] — 2026-04-27
 
 ### Added
@@ -521,7 +614,8 @@ docs / API audit pass, then 1.0.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mdkit-project/mdkit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mdkit-project/mdkit/compare/v0.5.6...v0.6.0
 [0.5.6]: https://github.com/mdkit-project/mdkit/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...v0.5.5

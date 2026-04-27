@@ -18,7 +18,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// you need fine-grained failure routing, dispatch on
 /// [`Extractor::name`](crate::Extractor::name) when constructing the
 /// engine, or wrap a backend with your own error mapping.
+///
+/// Marked `#[non_exhaustive]` so future minor versions can add new
+/// variants (e.g. a dedicated `EncryptedDocument` for password-
+/// protected PDFs) without breaking downstream `match` blocks.
+/// Callers that pattern-match should always include a wildcard arm.
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum Error {
     /// Filesystem failure: file missing, permission denied, EOF, etc.
     #[error("I/O error: {0}")]

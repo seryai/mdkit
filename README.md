@@ -4,15 +4,14 @@
 Tauri / Iced / native desktop apps that want best-in-class document
 extraction without a 350 MB Python sidecar.
 
-> **Status:** v0.6 — PDF (Pdfium with scanned + mixed-content OCR
-> composition), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/LaTeX), spreadsheets
-> (calamine), CSV/TSV, HTML (html2md / Pandoc), and OCR backends
-> for every major desktop platform: macOS Vision, Windows.Media.Ocr,
-> AND ONNX-runtime PaddleOCR (Linux + cross-platform). The trait
-> surface + dispatch engine are stable. Feature coverage is at parity
-> with Python markitdown for non-audio formats on every desktop OS.
-> v0.7 will be a docs + API audit pass before 1.0. Watch / star the
-> repo to follow along.
+> **Status:** v0.7 — **API stability candidate for 1.0**. Format
+> coverage closed in v0.6 (PDF with scanned + mixed-content OCR,
+> Pandoc-formats, spreadsheets, CSV/TSV, HTML, OCR backends for
+> macOS / Windows / Linux). v0.7 freezes the public surface — see
+> the [stability section](#stability-v07) below for what's locked
+> in. v0.7.x will iterate on examples + cookbook docs. 1.0 ships
+> once the API is exercised by at least one downstream production
+> user. Watch / star the repo to follow along.
 
 ## Why this exists
 
@@ -131,6 +130,27 @@ formats simply won't be registered, and `Engine::extract` will return
 Dual-licensed under [MIT](LICENSE-MIT) OR [Apache 2.0](LICENSE-APACHE)
 at your option. SPDX: `MIT OR Apache-2.0`.
 
+## Stability (v0.7+) {#stability-v07}
+
+v0.7 is the **API stability candidate** for 1.0. The following surface
+is committed to and will only change with a major version bump:
+
+- The `Extractor` trait shape — required methods, default implementations, `Send + Sync` bound.
+- `Engine` construction + dispatch — `new`, `with_defaults`, `with_defaults_diagnostic`, `register`, `extract`, `extract_bytes`, `len`, `is_empty`.
+- `Document` field set + `Document::new`. Marked `#[non_exhaustive]` so we can add fields (page count, language, confidence) without major bumps.
+- `Error` enum semantics. Marked `#[non_exhaustive]` so we can add variants without major bumps. **Pattern-matchers must include a wildcard arm.**
+- Feature flag names: `pdf`, `pandoc`, `calamine`, `csv`, `html`, `ocr-platform`, `ocr-onnx`, `ocr-onnx-download`, `full`.
+- Backend `name()` strings — used by callers for filtering / logging.
+
+The following are **implementation details** and may change in minor versions:
+
+- Internal layout of any specific extractor (private fields, helper methods).
+- Exact set of `Document.metadata` keys per backend (new keys may appear; documented keys stay).
+- Auto-registration order in `Engine::with_defaults` (when multiple backends claim overlapping extensions; documented priority stays).
+- Internal sidecar / FFI details (Pandoc's `--server` mode, ONNX runtime version, libpdfium binding).
+
+1.0 will be cut once the API is exercised by at least one downstream production user.
+
 ## Status & roadmap
 
 This is a young project. v0.1 ships the trait surface, dispatch
@@ -169,7 +189,11 @@ roadmap below:
       <https://github.com/GreatV/oar-ocr/releases>. Opt into
       `ocr-onnx-download` to let oar-ocr fetch the ONNX Runtime
       native lib for you.
-- [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)
+- [x] **v0.7 — API stability candidate (`#[non_exhaustive]` audit, `#[must_use]` audit, stability commitments doc).**
+      v0.7.0 freezes the public surface for 1.0. v0.7.x will iterate
+      on examples + cookbook docs + niche backend polish that doesn't
+      change the public API. 1.0 ships once the API is exercised by
+      at least one downstream production user.
 
 Issues, PRs, and design discussion welcome at
 <https://github.com/mdkit-project/mdkit/issues>.
