@@ -35,7 +35,8 @@ The composition we ship by default:
 |---|---|---|
 | DOCX, PPTX, EPUB, RTF, ODT, LaTeX | [Pandoc][pandoc] sidecar | Best-in-world conversion quality. ~150 MB but you bundle it once. |
 | PDF (text) | [`pdfium-render`][pdfium] | Google's Pdfium engine, in-process, layout-aware. ~5 MB. |
-| PDF (scanned) + standalone images | Platform-native OCR — Vision.framework on macOS, Windows.Media.Ocr on Windows, ONNX-based ([Surya][surya]) on Linux | OS-quality on Mac/Win for free. ONNX models on Linux. |
+| PDF (scanned) | Pdfium renders pages → platform OCR (Vision / Windows.Media.Ocr) | Composed automatically by `Engine::with_defaults` when both `pdf` and `ocr-platform` features are on. |
+| Standalone images | Platform-native OCR — Vision.framework on macOS, Windows.Media.Ocr on Windows, ONNX-based ([Surya][surya]) on Linux | OS-quality on Mac/Win for free. ONNX models on Linux. |
 | XLSX, XLS, ODS | [`calamine`][calamine] | Already the Rust ecosystem standard. |
 | CSV, TSV | [`csv`][csv] | Stdlib-quality. |
 | HTML | [`html2md`][html2md] (or Pandoc, configurable) | Default cheap, optional best. |
@@ -152,7 +153,11 @@ roadmap below:
       GIF / HEIC via Apple Vision (neural-network-based, Apple Neural
       Engine-accelerated on Apple Silicon). `WindowsOcrExtractor`
       (Windows) handles PNG / JPG / TIFF / BMP / GIF via the OS-built-in
-      Windows.Media.Ocr engine. Linux ONNX backend lands in v0.6.
+      Windows.Media.Ocr engine. v0.5.3 adds **scanned-PDF → OCR
+      composition**: `PdfiumExtractor` accepts an OCR fallback at
+      construction; when text extraction yields empty markdown, each
+      page is rendered to a PNG and routed through OCR with `## Page N`
+      headings. Linux ONNX backend lands in v0.6.
 - [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
 - [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)
 

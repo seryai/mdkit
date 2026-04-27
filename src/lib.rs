@@ -217,6 +217,28 @@ impl Engine {
         {
             match crate::pdf::PdfiumExtractor::new() {
                 Ok(ext) => {
+                    // Wire the platform OCR backend in as a fallback
+                    // for scanned (image-only) PDFs. Pdfium can't
+                    // extract text from those — without this hop,
+                    // PdfiumExtractor returns empty markdown silently.
+                    // We construct a SECOND OCR-extractor instance
+                    // here (the standalone image-OCR registration is
+                    // separate); both are stateless so duplication is
+                    // free.
+                    #[allow(unused_mut)]
+                    let mut ext = ext;
+                    #[cfg(all(feature = "ocr-platform", target_os = "macos"))]
+                    {
+                        ext = ext.with_ocr_fallback(Box::new(
+                            crate::ocr_macos::VisionOcrExtractor::new(),
+                        ));
+                    }
+                    #[cfg(all(feature = "ocr-platform", target_os = "windows"))]
+                    {
+                        ext = ext.with_ocr_fallback(Box::new(
+                            crate::ocr_windows::WindowsOcrExtractor::new(),
+                        ));
+                    }
                     engine.register(Box::new(ext));
                 }
                 Err(e) => errors.push(("pdf", e)),

@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 rust-version = "1.88"
 authors = ["mdkit contributors"]
@@ -23,7 +23,7 @@ exclude = [
 default = ["pdf", "calamine", "csv", "html"]
 
 # In-process Rust backends.
-pdf      = ["dep:pdfium-render"]   # PDF text via Google Pdfium (libpdfium required at runtime)
+pdf      = ["dep:pdfium-render", "dep:tempfile"]  # PDF text via Google Pdfium (libpdfium required at runtime); tempfile spools pages for OCR fallback
 calamine = ["dep:calamine"]         # XLSX / XLS / XLSB / ODS spreadsheets
 csv      = ["dep:csv"]              # CSV / TSV
 html     = ["dep:html2md"]          # HTML / HTM (lighter alternative to Pandoc for HTML)
@@ -48,10 +48,15 @@ thiserror = "2"
 # above. Dependencies use `default-features = false` and only enable
 # the minimum surface mdkit consumes — keeps the dependency graph
 # small for downstream consumers.
-pdfium-render = { version = "0.9", optional = true, default-features = false, features = ["thread_safe", "pdfium_latest"] }
+pdfium-render = { version = "0.9", optional = true, default-features = false, features = ["thread_safe", "pdfium_latest", "image_latest"] }
 calamine      = { version = "0.34", optional = true }
 csv           = { version = "1", optional = true }
 html2md       = { version = "0.2", optional = true }
+# Used by PdfiumExtractor's scanned-PDF → OCR fallback (v0.5.3) to
+# spool rendered page PNGs into a per-call TempDir before handing them
+# to a registered OCR extractor. Only pulled in when the `pdf`
+# feature is active.
+tempfile      = { version = "3", optional = true }
 
 # macOS Vision.framework OCR (gated by `ocr-platform` feature). The
 # objc2 ecosystem deps are macOS-only by definition; on other targets

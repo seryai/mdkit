@@ -11,6 +11,74 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-04-27
+
+### Added
+
+- **Scanned-PDF → OCR composition.** `PdfiumExtractor` now takes an
+  optional OCR fallback at construction via
+  `with_ocr_fallback(Box<dyn Extractor>)`. When primary text
+  extraction yields empty markdown (the typical signature of an
+  image-only scanned PDF), each page is rendered to a temporary PNG
+  and routed through the fallback extractor. Per-page output is
+  joined with `## Page N` headings so downstream readers — humans and
+  LLMs — can cite by page. Fully closes the most-reported gap in
+  PdfiumExtractor's v0.2–v0.5.2 surface: scanned PDFs no longer
+  silently return empty markdown.
+- `Engine::with_defaults` wires the platform OCR backend into
+  `PdfiumExtractor` automatically when both `pdf` and `ocr-platform`
+  features are enabled and the target OS has a native OCR engine
+  (macOS Vision in v0.5.0; Windows.Media.Ocr in v0.5.2). Two OCR
+  extractor instances are constructed: one stays in PdfiumExtractor's
+  fallback slot for PDFs, the other registers normally for
+  PNG/JPG/etc. — both are stateless so duplication is free.
+- New public API on `PdfiumExtractor`:
+  - `with_ocr_fallback(Box<dyn Extractor>) -> Self` — install the
+    fallback (builder-style).
+  - `with_ocr_render_scale(f32) -> Self` — override the per-page
+    render scale (default 2.0, ~144 DPI). Higher values improve OCR
+    accuracy on small text but risk exceeding Windows
+    `MaxImageDimension` (~2600 px).
+  - `render_pages_to_pngs(path, out_dir) -> Result<Vec<PathBuf>>` —
+    render all pages of a PDF to PNG files in `out_dir`. Used
+    internally by the OCR-fallback path; exposed publicly so callers
+    building richer pipelines can reuse it.
+- New extracted-document metadata keys when the OCR fallback fires:
+  `extractor_chain` (e.g. `"pdfium-render → vision-macos"`) and
+  `pages_ocred` (page count). Stable across the v0.5.x line.
+
+### Changed
+
+- `pdfium-render` feature set now includes `image_latest` (in
+  addition to `thread_safe` and `pdfium_latest`). This pulls in the
+  `image` crate as a transitive dep for PNG encoding of rendered
+  pages — adds ~10 MB compiled to the `pdf` feature, which is the
+  acceptable tradeoff for closing the scanned-PDF gap. Callers that
+  only want raw text extraction (no OCR fallback) still get the
+  smaller v0.5.2 footprint by skipping the `pdf` feature, or by
+  constructing `PdfiumExtractor` without an OCR fallback.
+- `tempfile = "3"` moves from dev-only to an optional regular dep
+  gated by the `pdf` feature, since the OCR-fallback path uses
+  `tempfile::tempdir` to spool rendered pages.
+
+### Notes
+
+- The `extract_bytes` path on `PdfiumExtractor` does NOT engage the
+  OCR fallback (it would need to spool the byte slice to a tempfile
+  first). The file-path API covers the dominant use case. If a real
+  caller needs bytes-to-OCR for scanned PDFs, open an issue.
+- The mixed-content case (some text-bearing pages, some scanned
+  pages within the same PDF) is intentionally NOT handled by the
+  v0.5.3 fallback — pdfium returns the text-bearing pages, fallback
+  doesn't engage, scanned pages stay missing. Detecting and OCRing
+  individual pages within an otherwise text-bearing PDF is left to
+  a future release; the trigger today is whole-document
+  `markdown.trim().is_empty()`.
+- `tests/fixtures/scanned.pdf` end-to-end test added (gated behind
+  `#[ignore]`) for local validation. To run on macOS:
+  `cargo test --features "pdf ocr-platform" -- --ignored
+  scanned_pdf_routes_through_ocr_fallback`.
+
 ## [0.5.2] — 2026-04-27
 
 ### Added
@@ -257,7 +325,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...v0.5.0
