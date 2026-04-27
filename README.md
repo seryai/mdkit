@@ -196,7 +196,7 @@ roadmap below:
       at least one downstream production user.
 
 Issues, PRs, and design discussion welcome at
-<https://github.com/mdkit-project/mdkit/issues>.
+<https://github.com/seryai/mdkit/issues>.
 
 ## Used by
 

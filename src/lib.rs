@@ -1,6 +1,6 @@
 //! # mdkit — get markdown out of any document.
 //!
-//! See the [README](https://github.com/mdkit-project/mdkit) for the full
+//! See the [README](https://github.com/seryai/mdkit) for the full
 //! design rationale; the short version is: dispatch by file extension to
 //! the best backend per format. Pandoc for DOCX/PPTX/EPUB/RTF/ODT/LaTeX,
 //! Pdfium for PDF, OS-native APIs for OCR, `calamine` for spreadsheets.

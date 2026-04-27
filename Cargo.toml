@@ -1,13 +1,13 @@
 [package]
 name = "mdkit"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 rust-version = "1.88"
 authors = ["mdkit contributors"]
 description = "Get markdown out of any document — Pandoc + pdfium + platform-native OCR, dispatched per format."
 documentation = "https://docs.rs/mdkit"
-homepage = "https://github.com/mdkit-project/mdkit"
-repository = "https://github.com/mdkit-project/mdkit"
+homepage = "https://github.com/seryai/mdkit"
+repository = "https://github.com/seryai/mdkit"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["markdown", "pdf", "docx", "pandoc", "ocr"]

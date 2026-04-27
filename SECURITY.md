@@ -9,7 +9,7 @@ service via malformed input, supply-chain concern — please report it
 privately first.
 
 **Email:** open a GitHub Security Advisory at
-<https://github.com/mdkit-project/mdkit/security/advisories/new>.
+<https://github.com/seryai/mdkit/security/advisories/new>.
 
 We aim to acknowledge reports within **72 hours** and ship a fix or
 mitigation within **14 days** for confirmed issues. Reports that meet
