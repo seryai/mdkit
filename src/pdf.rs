@@ -361,6 +361,16 @@ mod tests {
         );
     }
 
+    // Only define this test on platforms that have a platform OCR
+    // backend — Linux without an OCR feature can't satisfy the
+    // assertions, and trying to write a uniform-shape test with a
+    // panic-typed `let ocr` confused clippy's unreachable_code /
+    // unused_variables lints under -D warnings. Cleaner to simply
+    // not generate the test on unsupported targets.
+    #[cfg(all(
+        feature = "ocr-platform",
+        any(target_os = "macos", target_os = "windows")
+    ))]
     #[test]
     #[ignore = "requires libpdfium AND a scanned PDF in tests/fixtures/scanned.pdf"]
     fn scanned_pdf_routes_through_ocr_fallback() {
@@ -370,16 +380,10 @@ mod tests {
         // Drop an image-only PDF (e.g. a screenshot saved as PDF) at
         // tests/fixtures/scanned.pdf — primary pdfium extraction must
         // return empty markdown so the fallback path engages.
-        #[cfg(all(feature = "ocr-platform", target_os = "macos"))]
+        #[cfg(target_os = "macos")]
         let ocr: Box<dyn Extractor> = Box::new(crate::ocr_macos::VisionOcrExtractor::new());
-        #[cfg(all(feature = "ocr-platform", target_os = "windows"))]
+        #[cfg(target_os = "windows")]
         let ocr: Box<dyn Extractor> = Box::new(crate::ocr_windows::WindowsOcrExtractor::new());
-        #[cfg(not(all(
-            feature = "ocr-platform",
-            any(target_os = "macos", target_os = "windows")
-        )))]
-        let ocr: Box<dyn Extractor> =
-            panic!("this test requires the ocr-platform feature on macOS or Windows");
 
         let extractor = PdfiumExtractor::new()
             .expect("libpdfium not available")
@@ -391,10 +395,14 @@ mod tests {
             !doc.markdown.is_empty(),
             "expected non-empty markdown from scanned.pdf via OCR fallback"
         );
-        assert_eq!(
-            doc.metadata.get("extractor_chain").map(String::as_str),
-            Some("pdfium-render → vision-macos").or(Some("pdfium-render → ocr-windows")),
-            "extractor_chain metadata should record the fallback hop"
+
+        let chain = doc
+            .metadata
+            .get("extractor_chain")
+            .map_or("", String::as_str);
+        assert!(
+            chain == "pdfium-render → vision-macos" || chain == "pdfium-render → ocr-windows",
+            "expected extractor_chain to record the fallback hop, got {chain:?}"
         );
     }
 
