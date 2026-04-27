@@ -11,6 +11,77 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-04-27
+
+### Added
+
+- **`OnnxOcrExtractor`** — cross-platform OCR via ONNX-runtime
+  PaddleOCR models, backed by the `oar-ocr` crate (which wraps
+  PaddleOCR's detection + recognition ONNX exports through `ort`).
+  Works on Linux, macOS, Windows, and WebAssembly — making this the
+  recommended OCR backend on Linux, where the `ocr-platform` feature
+  has no native engine to offer. Closes the last format-coverage gap
+  on the v0.x roadmap.
+- New `ocr-onnx` feature flag — adds `oar-ocr` (default-features
+  off) and `image` as direct deps. The feature gate makes
+  `OnnxOcrExtractor` available; runtime model setup is the caller's
+  responsibility (see "Model setup" below).
+- New `ocr-onnx-download` feature flag — opt-in convenience that
+  enables `oar-ocr/download-binaries`. With it, `oar-ocr` fetches
+  the ONNX Runtime native library at build / first-use. Without it,
+  consumers ship their own `libonnxruntime` (system package or
+  alongside the binary), same shape as the libpdfium runtime
+  requirement for the `pdf` feature.
+- New public API:
+  - `OnnxOcrExtractor::with_models(detection, recognition, dict)`
+    — construct from caller-provided ONNX model paths. Returns
+    `Error::MissingDependency` for missing files,
+    `Error::ParseError` for corrupt models or libonnxruntime
+    issues.
+  - `OnnxOcrExtractor::detection_model_path() -> &Path` — diagnostic
+    accessor for the detection-model path the extractor was built
+    with.
+
+### Changed
+
+- `[features] full` now includes `ocr-onnx-download` instead of the
+  prior `ocr-onnx` placeholder, so `cargo test --all-features` (the
+  CI matrix) actually exercises the ONNX path with a real
+  libonnxruntime.
+
+### Notes
+
+- **Model setup.** `OnnxOcrExtractor::with_models` requires three
+  files supplied by the caller — download from
+  <https://github.com/GreatV/oar-ocr/releases>. For English-only
+  recognition: `pp-ocrv5_mobile_det.onnx` (~4.6 MB) +
+  `en_pp-ocrv5_mobile_rec.onnx` (~7.5 MB) +
+  `ppocrv5_en_dict.txt`. Other languages: swap the recognition
+  model + dict. Detection is language-independent.
+- **Why no auto-registration in `Engine::with_defaults`.**
+  Construction requires model paths, and there's no portable default
+  location to look. Callers wire it in explicitly:
+  ```rust
+  let ocr = OnnxOcrExtractor::with_models(det, rec, dict)?;
+  let mut engine = Engine::with_defaults();
+  engine.register(Box::new(ocr));
+  ```
+- **Why the Linux + cross-platform framing.** macOS and Windows
+  already get a higher-quality, zero-setup OCR via `ocr-platform`
+  (Vision / `Windows.Media.Ocr`). `OnnxOcrExtractor` is most
+  valuable on Linux, but registering it on macOS / Windows works
+  fine too — useful when you want consistent OCR output across
+  platforms or need a language pack the native engines don't ship.
+
+### v0.6 milestone
+
+This release closes the v0.6 roadmap line ("`ocr-onnx` feature"). The
+v0.x milestones for the trait-stable engine + dispatch surface are
+now all shipped: PDF (Pdfium), Pandoc-formats (DOCX/PPTX/EPUB/RTF/ODT/
+LaTeX), spreadsheets (calamine), CSV/TSV, HTML (html2md or Pandoc),
+plus OCR backends for every major desktop platform. v0.7 will be a
+docs / API audit pass, then 1.0.
+
 ## [0.5.6] — 2026-04-27
 
 ### Added
@@ -450,7 +521,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mdkit-project/mdkit/compare/v0.5.6...v0.6.0
 [0.5.6]: https://github.com/mdkit-project/mdkit/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...v0.5.4

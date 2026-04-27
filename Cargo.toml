@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.5.6"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["mdkit contributors"]
@@ -33,13 +33,24 @@ html     = ["dep:html2md"]          # HTML / HTM (lighter alternative to Pandoc 
 # No Rust dependency needed; the binary itself is the dependency.
 pandoc   = []
 
-# OCR backends — pick one. Both can coexist; ocr-platform is preferred
-# at runtime when available (macOS / Windows), falling back to ocr-onnx.
+# OCR backends. ocr-platform is preferred at runtime on macOS / Windows
+# (uses the OS-native OCR engine — Vision / Windows.Media.Ocr). ocr-onnx
+# is the cross-platform fallback (works on Linux + everywhere else)
+# backed by the `oar-ocr` crate, which wraps PaddleOCR ONNX models via
+# `ort`. Both can coexist; the caller decides which extractor to
+# register, or uses `Engine::with_defaults` to get the platform-native
+# one when available.
 ocr-platform = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-vision", "dep:windows", "dep:windows-future"]
-ocr-onnx     = []   # placeholder; Surya/ONNX in v0.6
+ocr-onnx     = ["dep:oar-ocr", "dep:image"]
+# Opt-in: let oar-ocr fetch the ONNX Runtime native library at build
+# time / first use. Without this feature, the consumer is responsible
+# for shipping libonnxruntime alongside their binary (or installing
+# the system package). Same shape as the libpdfium runtime
+# requirement for the `pdf` feature.
+ocr-onnx-download = ["ocr-onnx", "oar-ocr/download-binaries"]
 
 # Build-everything convenience for downstream tests.
-full = ["pdf", "pandoc", "ocr-platform", "ocr-onnx", "calamine", "csv", "html"]
+full = ["pdf", "pandoc", "ocr-platform", "ocr-onnx-download", "calamine", "csv", "html"]
 
 [dependencies]
 thiserror = "2"
@@ -57,6 +68,20 @@ html2md       = { version = "0.2", optional = true }
 # to a registered OCR extractor. Only pulled in when the `pdf`
 # feature is active.
 tempfile      = { version = "3", optional = true }
+# ONNX-runtime OCR via `oar-ocr` (v0.6.0). Wraps PaddleOCR ONNX models
+# through `ort`; works on Linux + macOS + Windows + WebAssembly.
+# Caller supplies the three model files (det + rec + dict) — see
+# `OnnxOcrExtractor::with_models`. We disable oar-ocr's default
+# features (which include `download-binaries` for ONNX runtime DLL
+# auto-fetch) so consumers opt in explicitly via the
+# `ocr-onnx-download` feature.
+oar-ocr       = { version = "0.6", optional = true, default-features = false }
+# `image` is a direct dep when EITHER `pdf` (PNG encoding of rendered
+# pages) OR `ocr-onnx` (image decoding before handing to oar-ocr) is
+# enabled. We disable default features and enable only the formats
+# the OCR backends actually accept, keeping compile time + binary
+# size down.
+image         = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg", "bmp", "gif", "tiff"] }
 
 # macOS Vision.framework OCR (gated by `ocr-platform` feature). The
 # objc2 ecosystem deps are macOS-only by definition; on other targets

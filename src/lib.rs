@@ -76,6 +76,16 @@ pub mod ocr_macos;
 #[cfg(all(feature = "ocr-platform", target_os = "windows"))]
 pub mod ocr_windows;
 
+// Cross-platform ONNX OCR via the `oar-ocr` crate. Unlike the
+// platform-native modules above this one isn't gated by `target_os`
+// — `oar-ocr` works on Linux, macOS, Windows, and WebAssembly.
+// `Engine::with_defaults` does NOT auto-register an ONNX extractor
+// because construction requires caller-supplied model paths; users
+// wire it in explicitly. See module docs for the registration
+// pattern.
+#[cfg(feature = "ocr-onnx")]
+pub mod ocr_onnx;
+
 // ---------------------------------------------------------------------------
 // Document — the unit of output
 // ---------------------------------------------------------------------------

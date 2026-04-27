@@ -4,13 +4,15 @@
 Tauri / Iced / native desktop apps that want best-in-class document
 extraction without a 350 MB Python sidecar.
 
-> **Status:** v0.5 — PDF (Pdfium), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
-> LaTeX), spreadsheets (calamine), CSV/TSV, HTML (html2md / Pandoc),
-> macOS image OCR via Apple's Vision framework, AND Windows image
-> OCR via Windows.Media.Ocr. The trait surface + dispatch engine are
-> stable. Linux OCR (ONNX-based) lands in v0.6. Feature coverage is
-> at parity with Python markitdown for non-audio formats on macOS
-> and Windows. Watch / star the repo to follow along.
+> **Status:** v0.6 — PDF (Pdfium with scanned + mixed-content OCR
+> composition), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/LaTeX), spreadsheets
+> (calamine), CSV/TSV, HTML (html2md / Pandoc), and OCR backends
+> for every major desktop platform: macOS Vision, Windows.Media.Ocr,
+> AND ONNX-runtime PaddleOCR (Linux + cross-platform). The trait
+> surface + dispatch engine are stable. Feature coverage is at parity
+> with Python markitdown for non-audio formats on every desktop OS.
+> v0.7 will be a docs + API audit pass before 1.0. Watch / star the
+> repo to follow along.
 
 ## Why this exists
 
@@ -113,7 +115,8 @@ mdkit = { version = "0.1", features = ["pdf", "pandoc", "ocr-platform", "calamin
 | `pdf` | `pdfium-render` for PDF text extraction | ~5 MB |
 | `pandoc` | Pandoc sidecar wrapper for DOCX/PPTX/EPUB/RTF/ODT/LaTeX | ~150 MB sidecar to bundle separately |
 | `ocr-platform` | macOS Vision.framework + Windows.Media.Ocr (Linux falls back to `ocr-onnx`) | 0 on macOS/Win |
-| `ocr-onnx` | ONNX-based OCR with Surya model — works on all platforms incl. Linux | ~50 MB model |
+| `ocr-onnx` | ONNX-runtime PaddleOCR via [`oar-ocr`][oar-ocr] — works on all platforms incl. Linux. Caller supplies model files (~12 MB total) and `libonnxruntime`. | ~30 MB compiled |
+| `ocr-onnx-download` | Adds `ocr-onnx` and lets `oar-ocr` fetch ONNX Runtime native libs at build / first use | 0 (downloads at build) |
 | `calamine` | XLSX / XLS / ODS via `calamine` | ~1 MB |
 | `csv` | CSV / TSV | <1 MB |
 | `html` | HTML via `html2md` | <1 MB |
@@ -158,7 +161,14 @@ roadmap below:
       construction; when text extraction yields empty markdown, each
       page is rendered to a PNG and routed through OCR with `## Page N`
       headings. Linux ONNX backend lands in v0.6.
-- [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
+- [x] **v0.6 — `ocr-onnx` feature (PaddleOCR via [`oar-ocr`][oar-ocr]).**
+      `OnnxOcrExtractor` wraps PaddleOCR's detection + recognition
+      ONNX models through `ort`; works on Linux + macOS + Windows +
+      WebAssembly. Caller supplies the three model files
+      (det + rec + dict, ~12 MB total English-only) — download from
+      <https://github.com/GreatV/oar-ocr/releases>. Opt into
+      `ocr-onnx-download` to let oar-ocr fetch the ONNX Runtime
+      native lib for you.
 - [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)
 
 Issues, PRs, and design discussion welcome at
@@ -186,6 +196,7 @@ add yourself here.
 
 [markitdown]: https://github.com/microsoft/markitdown
 [markitdown-rs]: https://github.com/uhobnil/markitdown-rs
+[oar-ocr]: https://github.com/GreatV/oar-ocr
 [pandoc]: https://pandoc.org
 [pdfium]: https://pdfium.googlesource.com/pdfium/
 [calamine]: https://github.com/tafia/calamine
