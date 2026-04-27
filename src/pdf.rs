@@ -50,16 +50,24 @@ use std::path::Path;
 /// directory — useful when libpdfium ships next to your application
 /// binary).
 ///
-/// ## OCR fallback (scanned PDFs)
+/// ## OCR fallback (scanned + mixed-content PDFs)
 ///
-/// Pdfium can't extract text from image-only (scanned) PDFs — the
+/// Pdfium can't extract text from image-only (scanned) pages — the
 /// underlying engine sees no text objects, only embedded images.
-/// To handle that case, attach an OCR extractor at construction
-/// via [`with_ocr_fallback`](Self::with_ocr_fallback). When `extract`
-/// would otherwise return empty markdown, `PdfiumExtractor` renders
-/// each page to a temporary PNG and routes those through the
-/// fallback extractor, joining the per-page results into a single
-/// markdown body.
+/// To handle that case, attach an OCR extractor at construction via
+/// [`with_ocr_fallback`](Self::with_ocr_fallback). `PdfiumExtractor`
+/// then operates per-page: pages whose pdfium text extraction comes
+/// back empty (`text.trim().is_empty()`) get rendered to temporary
+/// PNGs and routed through the fallback extractor; pages with text
+/// pass through unchanged. This handles both the fully-scanned case
+/// AND the common mixed-content case (e.g. a text body with one
+/// scanned cover or signature page).
+///
+/// When ANY page goes through OCR, the output switches to a
+/// `## Page N`-headed layout so OCR'd pages are visually
+/// distinguishable and downstream readers can cite by page. Pure
+/// text-only PDFs keep the simpler blank-line-between-pages layout
+/// for backward compat with v0.2–v0.5.4.
 ///
 /// [`Engine::with_defaults`](crate::Engine::with_defaults) wires
 /// the platform OCR backend into `PdfiumExtractor` automatically when
@@ -177,6 +185,57 @@ impl PdfiumExtractor {
         Ok(pngs)
     }
 
+    /// Render only the specified page indices (0-based) to PNGs in
+    /// `out_dir`. Used by the v0.5.5 mixed-content OCR path so we
+    /// don't burn render time on pages that already extracted clean
+    /// text. `indices` is normalised internally (sorted + deduped);
+    /// returned PNGs are in ascending page order, with filenames
+    /// `page-NNNN.png` carrying the 1-based page number.
+    pub fn render_pages_subset_to_pngs(
+        &self,
+        path: &Path,
+        indices: &[usize],
+        out_dir: &Path,
+    ) -> Result<Vec<std::path::PathBuf>> {
+        let path_str = path.to_str().ok_or_else(|| {
+            Error::ParseError(format!("PDF path is not valid UTF-8: {}", path.display()))
+        })?;
+        let pdf_doc = self
+            .pdfium
+            .load_pdf_from_file(path_str, None)
+            .map_err(|e| Error::ParseError(format!("pdfium failed to open {path_str}: {e}")))?;
+
+        // Sort + dedupe so the returned Vec has a predictable
+        // (ascending-page-number) order regardless of how the caller
+        // assembled `indices`.
+        let mut wanted: Vec<usize> = indices.to_vec();
+        wanted.sort_unstable();
+        wanted.dedup();
+
+        let render_config = PdfRenderConfig::new().scale_page_by_factor(self.ocr_render_scale);
+        let mut pngs = Vec::with_capacity(wanted.len());
+        for (idx, page) in pdf_doc.pages().iter().enumerate() {
+            if wanted.binary_search(&idx).is_err() {
+                continue;
+            }
+            let bitmap = page
+                .render_with_config(&render_config)
+                .map_err(|e| Error::ParseError(format!("page {idx} render failed: {e}")))?;
+            let image = bitmap
+                .as_image()
+                .map_err(|e| Error::ParseError(format!("page {idx} bitmap → image failed: {e}")))?;
+            let png_path = out_dir.join(format!("page-{:04}.png", idx + 1));
+            image.save(&png_path).map_err(|e| {
+                Error::ParseError(format!(
+                    "failed to write rendered page {idx} to {}: {e}",
+                    png_path.display()
+                ))
+            })?;
+            pngs.push(png_path);
+        }
+        Ok(pngs)
+    }
+
     /// Internal: extract text from an already-loaded `PdfDocument`.
     /// Pages are joined with `\n\n` (one blank line between pages),
     /// preserving the document's reading order without injecting
@@ -258,33 +317,111 @@ impl Extractor for PdfiumExtractor {
         let path_str = path.to_str().ok_or_else(|| {
             Error::ParseError(format!("PDF path is not valid UTF-8: {}", path.display()))
         })?;
-        let doc = {
-            let pdf_doc = self
-                .pdfium
-                .load_pdf_from_file(path_str, None)
-                .map_err(|e| Error::ParseError(format!("pdfium failed to open {path_str}: {e}")))?;
-            Self::extract_from_document(&pdf_doc)?
-        };
+        let pdf_doc = self
+            .pdfium
+            .load_pdf_from_file(path_str, None)
+            .map_err(|e| Error::ParseError(format!("pdfium failed to open {path_str}: {e}")))?;
 
-        // Scanned-PDF OCR composition: when the primary text-extraction
-        // pass returns nothing and an OCR backend is registered as a
-        // fallback, render each page and route through OCR. We only
-        // engage the fallback on TRULY empty results (`trim().is_empty()`)
-        // — partial extractions stay as-is, since mixing pdfium text
-        // with OCR'd text on the same page tends to produce duplicate
-        // or garbled output.
-        //
-        // Metadata (title, author, etc.) survives the swap: scanned PDFs
-        // often have populated /Info dicts even when /Contents is
-        // image-only, so we merge what `extract_from_document` already
-        // pulled into the OCR result rather than dropping it.
-        if doc.markdown.trim().is_empty() {
-            if let Some(ocr) = &self.ocr_fallback {
-                return self.extract_via_ocr(path, ocr.as_ref(), doc.title, doc.metadata);
-            }
+        // Per-page text extraction. Holding the per-page Vec (rather
+        // than pre-joining) lets us route just the empty pages through
+        // OCR if a fallback is configured — the v0.5.5 mixed-content
+        // path. v0.5.0–v0.5.4 only triggered OCR when the WHOLE
+        // document came back empty, which missed partially-scanned
+        // PDFs (e.g. text body with one scanned cover page).
+        // pdfium-render's page count returns i32 (PDF spec: pages are
+        // u31-bounded); negative values would be a pdfium bug, so
+        // saturate at 0 rather than carry the sign-loss risk into our
+        // Vec capacity.
+        let page_count = usize::try_from(pdf_doc.pages().len()).unwrap_or(0);
+        let mut pages: Vec<String> = Vec::with_capacity(page_count);
+        for (idx, page) in pdf_doc.pages().iter().enumerate() {
+            let text = page.text().map_err(|e| {
+                Error::ParseError(format!("page {idx} text extraction failed: {e}"))
+            })?;
+            pages.push(text.all());
         }
 
-        Ok(doc)
+        let (title, mut metadata) = Self::extract_metadata(&pdf_doc);
+        // Drop the PdfDocument before we re-open it inside
+        // `render_pages_subset_to_pngs` — pdfium-render's thread_safe
+        // mode tolerates concurrent loads, but releasing this handle
+        // first keeps memory tidy on long PDFs.
+        drop(pdf_doc);
+
+        let empty_indices: Vec<usize> = pages
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.trim().is_empty())
+            .map(|(i, _)| i)
+            .collect();
+
+        let any_ocred = !empty_indices.is_empty() && self.ocr_fallback.is_some();
+
+        if any_ocred {
+            // unwrap is safe — `any_ocred` requires `is_some()` above.
+            let ocr = self.ocr_fallback.as_ref().unwrap().as_ref();
+            let temp = tempfile::tempdir().map_err(|e| {
+                Error::ParseError(format!(
+                    "could not create tempdir for PDF→OCR fallback: {e}"
+                ))
+            })?;
+            let pngs = self.render_pages_subset_to_pngs(path, &empty_indices, temp.path())?;
+
+            for (vec_idx, &page_idx) in empty_indices.iter().enumerate() {
+                let png = &pngs[vec_idx];
+                let page_doc = ocr.extract(png).map_err(|e| {
+                    Error::ParseError(format!(
+                        "OCR failed on rendered page {} ({}): {e}",
+                        page_idx + 1,
+                        png.display()
+                    ))
+                })?;
+                pages[page_idx] = page_doc.markdown;
+            }
+
+            metadata.insert(
+                "extractor_chain".into(),
+                format!("pdfium-render → {}", ocr.name()),
+            );
+            metadata.insert("pages_ocred".into(), empty_indices.len().to_string());
+        }
+
+        // Format the final markdown. When OCR was involved we wrap
+        // each page in a `## Page N` heading so downstream readers
+        // can cite by page (and so OCR'd pages are visually
+        // distinguishable in mixed-content output). For pure-text
+        // PDFs we keep the simpler blank-line-between-pages layout
+        // that v0.2–v0.5.4 used — preserves backward compat for
+        // callers whose snapshots / tests pin that shape.
+        let markdown = if any_ocred {
+            let mut out = String::new();
+            for (idx, page_text) in pages.iter().enumerate() {
+                let trimmed = page_text.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if !out.is_empty() {
+                    out.push_str("\n\n");
+                }
+                let _ = write!(out, "## Page {}\n\n{trimmed}", idx + 1);
+            }
+            out
+        } else {
+            let mut out = String::new();
+            for (idx, page_text) in pages.iter().enumerate() {
+                if idx > 0 {
+                    out.push_str("\n\n");
+                }
+                out.push_str(page_text);
+            }
+            out
+        };
+
+        Ok(Document {
+            markdown,
+            title,
+            metadata,
+        })
     }
 
     fn extract_bytes(&self, bytes: &[u8], _ext: &str) -> Result<Document> {
@@ -297,66 +434,6 @@ impl Extractor for PdfiumExtractor {
             .load_pdf_from_byte_slice(bytes, None)
             .map_err(|e| Error::ParseError(format!("pdfium failed to open byte slice: {e}")))?;
         Self::extract_from_document(&doc)
-    }
-}
-
-impl PdfiumExtractor {
-    /// Render each page to a PNG, OCR each PNG via `ocr`, join the
-    /// per-page markdown with `## Page N` headings so downstream
-    /// readers can cite by page. Best-effort: a per-page OCR failure
-    /// surfaces as a typed error rather than being silently skipped.
-    ///
-    /// `existing_title` and `existing_metadata` come from the primary
-    /// pdfium extraction — they survive the OCR detour since scanned
-    /// PDFs commonly have populated /Info dicts that we want to keep.
-    /// `extractor_chain` and `pages_ocred` are added on top.
-    fn extract_via_ocr(
-        &self,
-        path: &Path,
-        ocr: &dyn Extractor,
-        existing_title: Option<String>,
-        mut metadata: std::collections::HashMap<String, String>,
-    ) -> Result<Document> {
-        let temp = tempfile::tempdir().map_err(|e| {
-            Error::ParseError(format!(
-                "could not create tempdir for PDF→OCR fallback: {e}"
-            ))
-        })?;
-        let pngs = self.render_pages_to_pngs(path, temp.path())?;
-
-        let mut markdown = String::new();
-        for (idx, png) in pngs.iter().enumerate() {
-            let page_doc = ocr.extract(png).map_err(|e| {
-                Error::ParseError(format!(
-                    "OCR failed on rendered page {} ({}): {e}",
-                    idx + 1,
-                    png.display()
-                ))
-            })?;
-            let page_text = page_doc.markdown.trim();
-            if page_text.is_empty() {
-                continue;
-            }
-            if !markdown.is_empty() {
-                markdown.push_str("\n\n");
-            }
-            // write! into a String never fails; the Result is
-            // discarded with `let _ = ...` to satisfy clippy.
-            let _ = write!(markdown, "## Page {}\n\n", idx + 1);
-            markdown.push_str(page_text);
-        }
-
-        metadata.insert(
-            "extractor_chain".into(),
-            format!("pdfium-render → {}", ocr.name()),
-        );
-        metadata.insert("pages_ocred".into(), pngs.len().to_string());
-
-        Ok(Document {
-            markdown,
-            title: existing_title,
-            metadata,
-        })
     }
 }
 
@@ -443,12 +520,59 @@ mod tests {
         );
     }
 
-    // Only define this test on platforms that have a platform OCR
-    // backend — Linux without an OCR feature can't satisfy the
-    // assertions, and trying to write a uniform-shape test with a
-    // panic-typed `let ocr` confused clippy's unreachable_code /
-    // unused_variables lints under -D warnings. Cleaner to simply
-    // not generate the test on unsupported targets.
+    // The OCR-fallback tests below are only compiled on platforms
+    // that have a platform OCR backend — Linux without an OCR feature
+    // can't satisfy the assertions, and trying to write a
+    // uniform-shape test with a panic-typed `let ocr` confused
+    // clippy's unreachable_code / unused_variables lints under -D
+    // warnings. Cleaner to simply not generate the tests on
+    // unsupported targets.
+
+    #[cfg(all(
+        feature = "ocr-platform",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    #[test]
+    #[ignore = "requires libpdfium AND a mixed-content PDF in tests/fixtures/mixed-content.pdf"]
+    fn mixed_content_pdf_ocrs_only_empty_pages() {
+        // Skipped by default. To run on macOS:
+        //   cargo test --features "pdf ocr-platform" -- --ignored \
+        //     mixed_content_pdf_ocrs_only_empty_pages
+        // Drop a 2+ page PDF with at least one text-bearing page AND
+        // at least one scanned (image-only) page at
+        //   tests/fixtures/mixed-content.pdf
+        // The v0.5.5 contract: pages with text pass through pdfium,
+        // empty pages get OCR'd, and `pages_ocred` reports a count
+        // strictly less than the total page count.
+        #[cfg(target_os = "macos")]
+        let ocr: Box<dyn Extractor> = Box::new(crate::ocr_macos::VisionOcrExtractor::new());
+        #[cfg(target_os = "windows")]
+        let ocr: Box<dyn Extractor> = Box::new(crate::ocr_windows::WindowsOcrExtractor::new());
+
+        let extractor = PdfiumExtractor::new()
+            .expect("libpdfium not available")
+            .with_ocr_fallback(ocr);
+        let doc = extractor
+            .extract(std::path::Path::new("tests/fixtures/mixed-content.pdf"))
+            .expect("extraction failed");
+
+        let pages_ocred: usize = doc
+            .metadata
+            .get("pages_ocred")
+            .and_then(|s| s.parse().ok())
+            .expect("pages_ocred metadata should be set when OCR fallback fires");
+        assert!(
+            pages_ocred >= 1,
+            "expected at least one OCR'd page in a mixed-content PDF"
+        );
+        // The "## Page N" heading layout activates whenever any page
+        // went through OCR, so it should appear in mixed output.
+        assert!(
+            doc.markdown.contains("## Page "),
+            "expected `## Page N` heading in mixed-content output"
+        );
+    }
+
     #[cfg(all(
         feature = "ocr-platform",
         any(target_os = "macos", target_os = "windows")
