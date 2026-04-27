@@ -425,10 +425,39 @@ impl Extractor for PdfiumExtractor {
     }
 
     fn extract_bytes(&self, bytes: &[u8], _ext: &str) -> Result<Document> {
-        // OCR fallback isn't wired for the bytes path — it'd need to
-        // spool the PDF to a tempfile first. Left for a future release
-        // if real callers ask for it; the file-path API covers the
-        // dominant use case (Tauri/Iced apps reading off disk).
+        // When an OCR fallback is configured we spool the bytes to a
+        // tempfile and route through the file-path `extract` so the
+        // per-page OCR logic (introduced in v0.5.5) handles
+        // scanned + mixed-content PDFs identically regardless of how
+        // the caller loaded them. Cost is one disk write + read of
+        // the PDF bytes (sub-ms for typical sizes), traded for code
+        // simplicity. A future release could add an in-memory
+        // `render_pages_subset` taking a pre-loaded `PdfDocument` if
+        // the spool overhead matters in practice.
+        //
+        // **Behavior change vs. v0.5.0–v0.5.5:** `extract_bytes` on a
+        // scanned PDF previously returned empty markdown silently;
+        // now it returns OCR'd markdown when both `pdf` and
+        // `ocr-platform` features wire the fallback in.
+        if self.ocr_fallback.is_some() {
+            let temp = tempfile::tempdir().map_err(|e| {
+                Error::ParseError(format!("could not create tempdir for bytes-path PDF: {e}"))
+            })?;
+            let pdf_path = temp.path().join("input.pdf");
+            std::fs::write(&pdf_path, bytes).map_err(|e| {
+                Error::ParseError(format!(
+                    "could not spool PDF bytes to {}: {e}",
+                    pdf_path.display()
+                ))
+            })?;
+            // tempdir is held alive across the call — pdfium and the
+            // OCR backend both need the file present until extract
+            // returns.
+            return self.extract(&pdf_path);
+        }
+
+        // Fast path: no OCR fallback configured. Original in-memory
+        // extraction with no disk roundtrip.
         let doc = self
             .pdfium
             .load_pdf_from_byte_slice(bytes, None)

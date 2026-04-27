@@ -11,6 +11,42 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-04-27
+
+### Added
+
+- **`extract_bytes` now engages the OCR fallback** for scanned and
+  mixed-content PDFs. v0.5.0–v0.5.5 documented this gap explicitly
+  ("OCR fallback isn't wired for the bytes path — left for a future
+  release if real callers ask"). v0.5.6 closes it: when
+  `PdfiumExtractor` has an OCR fallback configured, `extract_bytes`
+  spools the bytes to a tempfile and routes through the file-path
+  `extract`, picking up the per-page OCR logic for free. Cost is one
+  disk write + read of the PDF bytes (sub-ms for typical sizes),
+  traded for code simplicity.
+
+### Changed
+
+- **Behavior change:** `extract_bytes` on a scanned PDF previously
+  returned empty markdown silently. With both `pdf` and
+  `ocr-platform` features enabled (which `Engine::with_defaults`
+  wires together), it now returns OCR'd markdown — matching the
+  file-path `extract` contract introduced in v0.5.3 / refined in
+  v0.5.5. Pure text-only PDFs over the bytes path keep the original
+  in-memory fast path with no disk roundtrip.
+
+### Notes
+
+- A future optimization could add an in-memory `render_pages_subset`
+  that takes a pre-loaded `PdfDocument` (skipping the spool) — left
+  for now since the spool overhead is sub-ms even for large PDFs and
+  the simplicity-of-implementation win is real.
+- This is the last v0.5.x feature ship targeted before either v0.6
+  (Linux ONNX OCR) or v0.7 (audit + 1.0 candidate). Remaining v0.5.x
+  candidates are increasingly niche: Pandoc `--server` mode (batch
+  performance), Windows OCR auto-downscale via `BitmapTransform`
+  (large-image edge case).
+
 ## [0.5.5] — 2026-04-27
 
 ### Added
@@ -414,7 +450,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/mdkit-project/mdkit/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...v0.5.3
