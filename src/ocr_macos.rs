@@ -1,8 +1,9 @@
 // Inner attributes (allow / cfg) come before doc comments to avoid
 // splitting the module-level //! block. `unsafe_code` is allowed here
-// because Vision FFI requires it for some calls (raw-pointer args to
-// CGImageForProposedRect_context_hints); other ObjC calls in objc2
-// v0.6 are now safe and don't need unsafe blocks.
+// because the Vision FFI call to `VNImageRequestHandler::
+// initWithURL_options` is still marked unsafe in objc2-vision 0.3
+// (alloc-init pattern); the rest of the Vision calls in objc2 0.6
+// are safe and don't need unsafe blocks.
 #![allow(unsafe_code)]
 
 //! macOS OCR via the [Vision framework](https://developer.apple.com/documentation/vision)
@@ -36,7 +37,6 @@
 use crate::{Document, Error, Extractor, Result};
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::AnyThread;
-use objc2_app_kit::NSImage;
 use objc2_foundation::{NSArray, NSString, NSURL};
 use objc2_vision::{
     VNImageRequestHandler, VNRecognizeTextRequest, VNRecognizedTextObservation, VNRequest,
@@ -77,57 +77,54 @@ impl Extractor for VisionOcrExtractor {
 }
 
 /// Run the actual Vision OCR pipeline. Wrapped in an
-/// `autoreleasepool` so the autoreleased Cocoa objects (`NSImage`,
-/// `CGImageRefs`) get cleaned up promptly rather than living until
-/// the Tauri runloop drains its pool.
+/// `autoreleasepool` so autoreleased Cocoa objects (the `NSURL`,
+/// `NSDictionary`, `VNImageRequestHandler`, and the result
+/// `VNRecognizedTextObservation`s) get cleaned up promptly rather
+/// than living until the Tauri runloop drains its pool.
 fn extract_with_vision(path: &Path) -> Result<Document> {
-    // 1. Load the image file as NSImage. NSImage understands every
-    //    format Image I/O supports (which includes everything in
-    //    extensions() above).
+    // 1. Build an NSURL from the canonical file path. Vision's
+    //    `initWithURL_options` loads the image directly via Image I/O
+    //    — much simpler than going NSImage → CGImage, and eliminates
+    //    a whole class of "the conversion silently produced something
+    //    Vision can't read" bugs that bit us in v0.5.0.
     let path_str = path
         .to_str()
         .ok_or_else(|| Error::ParseError(format!("path is not valid UTF-8: {}", path.display())))?;
-
-    let url = NSURL::fileURLWithPath(&NSString::from_str(path_str));
-    let nsimage = NSImage::initWithContentsOfURL(NSImage::alloc(), &url).ok_or_else(|| {
+    let absolute_path = path
+        .canonicalize()
+        .map_err(|e| Error::ParseError(format!("could not canonicalize path {path_str}: {e}")))?;
+    let absolute_str = absolute_path.to_str().ok_or_else(|| {
         Error::ParseError(format!(
-            "could not load image (unsupported format or corrupt): {path_str}"
+            "canonical path is not valid UTF-8: {}",
+            absolute_path.display()
         ))
     })?;
+    let url = NSURL::fileURLWithPath(&NSString::from_str(absolute_str));
 
-    // 2. Convert NSImage to CGImage. Vision works on CGImage, not
-    //    NSImage. The proposedRect+context+hints arguments are the
-    //    "give me the image at the proposed size with default
-    //    rendering" path.
-    let cg_image =
-        unsafe { nsimage.CGImageForProposedRect_context_hints(std::ptr::null_mut(), None, None) }
-            .ok_or_else(|| {
-            Error::ParseError(format!("NSImage→CGImage conversion failed: {path_str}"))
-        })?;
-
-    // 3. Build the recognizer request. Default to "accurate"
-    //    recognition level (slower than fast, but the quality
-    //    difference is significant — and we're already paying the
-    //    process-startup cost).
+    // 2. Build the recognizer request. "Accurate" is slower than
+    //    "fast" but the quality difference is significant — and
+    //    we're already paying the process-startup cost. Explicit
+    //    recognition language so we don't depend on the system
+    //    default (avoids Vision returning nothing on a non-English
+    //    system).
     let request = {
         let req = VNRecognizeTextRequest::new();
         req.setRecognitionLevel(objc2_vision::VNRequestTextRecognitionLevel::Accurate);
         req.setUsesLanguageCorrection(true);
+        let langs: Retained<NSArray<NSString>> =
+            NSArray::from_retained_slice(&[NSString::from_str("en-US")]);
+        req.setRecognitionLanguages(&langs);
         req
     };
 
-    // 4. Hand the image to a request handler and run synchronously.
-    //    perform_requests blocks; that's fine — extraction is CPU-
-    //    bound and the caller decides whether to off-load to a
-    //    thread pool (Tauri's blocking task spawner is the usual
+    // 3. Hand the URL to a request handler and run synchronously.
+    //    `performRequests_error` blocks; that's fine — extraction
+    //    is CPU-bound and the caller decides whether to off-load to
+    //    a thread pool (Tauri's blocking task spawner is the usual
     //    pattern).
     let handler = unsafe {
         let options = objc2_foundation::NSDictionary::<NSString, objc2::runtime::AnyObject>::new();
-        VNImageRequestHandler::initWithCGImage_options(
-            VNImageRequestHandler::alloc(),
-            &cg_image,
-            &options,
-        )
+        VNImageRequestHandler::initWithURL_options(VNImageRequestHandler::alloc(), &url, &options)
     };
 
     // VNRecognizeTextRequest → VNImageBasedRequest → VNRequest.
@@ -140,7 +137,7 @@ fn extract_with_vision(path: &Path) -> Result<Document> {
         .performRequests_error(&requests)
         .map_err(|e| Error::ParseError(format!("Vision performRequests failed: {e:?}")))?;
 
-    // 5. Collect observations. Vision returns
+    // 4. Collect observations. Vision returns
     //    `[VNRecognizedTextObservation]` in `request.results`.
     //    Each observation carries one or more candidate strings
     //    (we take the top one) plus a bounding box.
@@ -148,11 +145,9 @@ fn extract_with_vision(path: &Path) -> Result<Document> {
 
     let mut markdown = String::new();
     for obs in &observations {
-        // Each result is a VNObservation; downcast to
-        // VNRecognizedTextObservation to access topCandidates.
-        let text_obs = obs.downcast_ref::<VNRecognizedTextObservation>();
-        let Some(text_obs) = text_obs else { continue };
-
+        let Some(text_obs) = obs.downcast_ref::<VNRecognizedTextObservation>() else {
+            continue;
+        };
         let candidates = text_obs.topCandidates(1);
         let Some(top) = candidates.iter().next() else {
             continue;
