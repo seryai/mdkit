@@ -180,13 +180,8 @@ impl PdfiumExtractor {
     /// Internal: extract text from an already-loaded `PdfDocument`.
     /// Pages are joined with `\n\n` (one blank line between pages),
     /// preserving the document's reading order without injecting
-    /// opinionated heading markup.
-    ///
-    /// Title + structured metadata extraction are not yet wired —
-    /// `pdfium-render`'s metadata API is in flux across recent
-    /// versions and the surface we want to expose deserves its own
-    /// dedicated commit. For v0.2 the markdown body is the only
-    /// guaranteed output; `title` is `None`, `metadata` is empty.
+    /// opinionated heading markup. Document-level metadata (title,
+    /// author, …) is harvested via [`extract_metadata`].
     fn extract_from_document(doc: &PdfDocument) -> Result<Document> {
         let mut markdown = String::new();
         for (idx, page) in doc.pages().iter().enumerate() {
@@ -199,11 +194,54 @@ impl PdfiumExtractor {
             markdown.push_str(&text.all());
         }
 
+        let (title, metadata) = Self::extract_metadata(doc);
+
         Ok(Document {
             markdown,
-            title: None,
-            metadata: std::collections::HashMap::new(),
+            title,
+            metadata,
         })
+    }
+
+    /// Read the PDF's document-information dictionary (the standard
+    /// `/Title /Author /Subject /Keywords /Creator /Producer
+    /// /CreationDate /ModDate` set per ISO 32000-2 §14.3.3) and map
+    /// it into a `(title, metadata)` pair.
+    ///
+    /// Tags with empty values are skipped so callers don't have to
+    /// distinguish "absent" from "present-but-empty". Date values are
+    /// passed through verbatim — Pdfium hands us PDF-spec date strings
+    /// (e.g. `D:20240115120000Z`) and parsing them into RFC 3339 is
+    /// out of scope for the extractor surface; downstream code that
+    /// cares can parse `metadata["created_at"]` itself.
+    fn extract_metadata(
+        doc: &PdfDocument,
+    ) -> (Option<String>, std::collections::HashMap<String, String>) {
+        let mut title: Option<String> = None;
+        let mut metadata = std::collections::HashMap::new();
+
+        for tag in doc.metadata().iter() {
+            let value = tag.value();
+            if value.trim().is_empty() {
+                continue;
+            }
+            let key = match tag.tag_type() {
+                PdfDocumentMetadataTagType::Title => {
+                    title = Some(value.to_string());
+                    "title"
+                }
+                PdfDocumentMetadataTagType::Author => "author",
+                PdfDocumentMetadataTagType::Subject => "subject",
+                PdfDocumentMetadataTagType::Keywords => "keywords",
+                PdfDocumentMetadataTagType::Creator => "creator",
+                PdfDocumentMetadataTagType::Producer => "producer",
+                PdfDocumentMetadataTagType::CreationDate => "created_at",
+                PdfDocumentMetadataTagType::ModificationDate => "modified_at",
+            };
+            metadata.insert(key.to_string(), value.to_string());
+        }
+
+        (title, metadata)
     }
 }
 
@@ -235,9 +273,14 @@ impl Extractor for PdfiumExtractor {
         // — partial extractions stay as-is, since mixing pdfium text
         // with OCR'd text on the same page tends to produce duplicate
         // or garbled output.
+        //
+        // Metadata (title, author, etc.) survives the swap: scanned PDFs
+        // often have populated /Info dicts even when /Contents is
+        // image-only, so we merge what `extract_from_document` already
+        // pulled into the OCR result rather than dropping it.
         if doc.markdown.trim().is_empty() {
             if let Some(ocr) = &self.ocr_fallback {
-                return self.extract_via_ocr(path, ocr.as_ref());
+                return self.extract_via_ocr(path, ocr.as_ref(), doc.title, doc.metadata);
             }
         }
 
@@ -262,7 +305,18 @@ impl PdfiumExtractor {
     /// per-page markdown with `## Page N` headings so downstream
     /// readers can cite by page. Best-effort: a per-page OCR failure
     /// surfaces as a typed error rather than being silently skipped.
-    fn extract_via_ocr(&self, path: &Path, ocr: &dyn Extractor) -> Result<Document> {
+    ///
+    /// `existing_title` and `existing_metadata` come from the primary
+    /// pdfium extraction — they survive the OCR detour since scanned
+    /// PDFs commonly have populated /Info dicts that we want to keep.
+    /// `extractor_chain` and `pages_ocred` are added on top.
+    fn extract_via_ocr(
+        &self,
+        path: &Path,
+        ocr: &dyn Extractor,
+        existing_title: Option<String>,
+        mut metadata: std::collections::HashMap<String, String>,
+    ) -> Result<Document> {
         let temp = tempfile::tempdir().map_err(|e| {
             Error::ParseError(format!(
                 "could not create tempdir for PDF→OCR fallback: {e}"
@@ -292,7 +346,6 @@ impl PdfiumExtractor {
             markdown.push_str(page_text);
         }
 
-        let mut metadata = std::collections::HashMap::new();
         metadata.insert(
             "extractor_chain".into(),
             format!("pdfium-render → {}", ocr.name()),
@@ -301,7 +354,7 @@ impl PdfiumExtractor {
 
         Ok(Document {
             markdown,
-            title: None,
+            title: existing_title,
             metadata,
         })
     }
@@ -358,6 +411,35 @@ mod tests {
         assert!(
             !doc.markdown.is_empty(),
             "expected non-empty markdown from hello.pdf"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires libpdfium AND a PDF with metadata at tests/fixtures/with-metadata.pdf"]
+    fn surfaces_pdf_metadata_and_title() {
+        // Skipped by default. To run: drop a PDF with at least Title +
+        // Author set in its /Info dict (most PDFs exported from Word /
+        // LaTeX / Pages do this automatically) at
+        //   tests/fixtures/with-metadata.pdf
+        // then run:
+        //   cargo test --features pdf -- --ignored \
+        //     surfaces_pdf_metadata_and_title
+        let extractor = PdfiumExtractor::new().expect("libpdfium not available");
+        let doc = extractor
+            .extract(std::path::Path::new("tests/fixtures/with-metadata.pdf"))
+            .expect("extraction failed");
+
+        // Title surfaces on Document.title — the v0.5.4 contract.
+        assert!(
+            doc.title.is_some(),
+            "expected Document.title to be populated from /Title; got {doc:?}"
+        );
+        // Title is also mirrored under metadata["title"] for callers
+        // that consume metadata uniformly.
+        assert_eq!(
+            doc.metadata.get("title").map(String::as_str),
+            doc.title.as_deref(),
+            "metadata['title'] should mirror Document.title"
         );
     }
 

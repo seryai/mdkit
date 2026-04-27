@@ -11,6 +11,46 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-04-27
+
+### Added
+
+- **PDF document metadata extraction** (deferred since v0.2).
+  `PdfiumExtractor` now reads the PDF document-information dictionary
+  (`/Title /Author /Subject /Keywords /Creator /Producer /CreationDate
+  /ModDate`, per ISO 32000-2 §14.3.3) and surfaces it on the returned
+  `Document`:
+  - `Document.title` is populated from `/Title` when present.
+  - `Document.metadata` carries the full set under stable lowercase
+    keys: `title`, `author`, `subject`, `keywords`, `creator`,
+    `producer`, `created_at`, `modified_at`. (`title` mirrors
+    `Document.title` so callers consuming metadata uniformly don't
+    have to special-case it.)
+  - Tags with empty values are skipped, so callers don't have to
+    distinguish "absent" from "present-but-empty."
+  - Date values are passed through verbatim — Pdfium hands us PDF-spec
+    date strings (e.g. `D:20240115120000Z`) and parsing them into
+    RFC 3339 stays out of scope for the extractor surface; downstream
+    code that cares can parse `metadata["created_at"]` itself.
+- **Metadata + title survive the OCR fallback path.** Scanned PDFs
+  often have populated `/Info` dicts even when `/Contents` is
+  image-only — the v0.5.3 fallback dropped both. v0.5.4 merges
+  pdfium-extracted metadata + title into the OCR-result `Document`,
+  with `extractor_chain` and `pages_ocred` added on top.
+
+### Notes
+
+- New ignored test `surfaces_pdf_metadata_and_title` validates the
+  contract end-to-end. Run with:
+  `cargo test --features pdf -- --ignored
+  surfaces_pdf_metadata_and_title` after dropping a PDF with `/Title`
+  set into `tests/fixtures/with-metadata.pdf`.
+- The metadata API uses pdfium-render 0.9's
+  `PdfDocument::metadata()` + `PdfDocumentMetadataTagType`. Dropping
+  this in for v0.5.4 (rather than back in v0.2) means we have a
+  single API to integrate against — the v0.2-era pdfium-render
+  metadata surface had churn that's since settled.
+
 ## [0.5.3] — 2026-04-27
 
 ### Added
@@ -325,7 +365,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...v0.5.1
