@@ -6,11 +6,11 @@ extraction without a 350 MB Python sidecar.
 
 > **Status:** v0.5 — PDF (Pdfium), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
 > LaTeX), spreadsheets (calamine), CSV/TSV, HTML (html2md / Pandoc),
-> AND macOS image OCR via Apple's Vision framework. The trait
-> surface + dispatch engine are stable. Windows OCR lands in v0.5.x;
-> Linux OCR (ONNX-based) in v0.6. Feature coverage is at parity with
-> Python markitdown for non-audio formats on macOS. Watch / star the
-> repo to follow along.
+> macOS image OCR via Apple's Vision framework, AND Windows image
+> OCR via Windows.Media.Ocr. The trait surface + dispatch engine are
+> stable. Linux OCR (ONNX-based) lands in v0.6. Feature coverage is
+> at parity with Python markitdown for non-audio formats on macOS
+> and Windows. Watch / star the repo to follow along.
 
 ## Why this exists
 
@@ -147,11 +147,12 @@ roadmap below:
       (CSV/TSV with auto-delimiter), `Html2mdExtractor` (HTML/HTM,
       registered before Pandoc so it wins by default for HTML).
       Engine registration order documented inline.
-- [x] **v0.5 — `ocr-platform` feature (macOS Vision).**
-      `VisionOcrExtractor` for PNG / JPG / TIFF / BMP / GIF / HEIC.
-      Apple Vision is neural-network-based and Apple Neural Engine-
-      accelerated on Apple Silicon. Windows.Media.Ocr lands in
-      v0.5.x; Linux ONNX backend in v0.6.
+- [x] **v0.5 — `ocr-platform` feature (macOS Vision + Windows.Media.Ocr).**
+      `VisionOcrExtractor` (macOS) handles PNG / JPG / TIFF / BMP /
+      GIF / HEIC via Apple Vision (neural-network-based, Apple Neural
+      Engine-accelerated on Apple Silicon). `WindowsOcrExtractor`
+      (Windows) handles PNG / JPG / TIFF / BMP / GIF via the OS-built-in
+      Windows.Media.Ocr engine. Linux ONNX backend lands in v0.6.
 - [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
 - [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)
 

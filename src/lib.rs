@@ -63,14 +63,18 @@ pub mod html;
 #[cfg(feature = "pandoc")]
 pub mod pandoc;
 
-// macOS Vision-based OCR. The module compiles only when both the
-// `ocr-platform` feature is enabled AND we're on macOS — because the
-// objc2-vision deps are macOS-only by definition. On Windows or
-// Linux with `ocr-platform` enabled, this module is absent and no
-// platform OCR extractor is registered (Windows lands in v0.5.x;
-// Linux uses the future `ocr-onnx` feature in v0.6).
+// Platform-native OCR. Each module is gated by both the
+// `ocr-platform` feature AND the matching `target_os`, because the
+// underlying FFI deps (objc2-vision on macOS, the `windows` crate on
+// Windows) are platform-specific by definition. On Linux with
+// `ocr-platform` enabled, neither module compiles — Linux users get
+// no platform OCR backend; ONNX-based fallback ships in v0.6 via
+// the separate `ocr-onnx` feature.
 #[cfg(all(feature = "ocr-platform", target_os = "macos"))]
 pub mod ocr_macos;
+
+#[cfg(all(feature = "ocr-platform", target_os = "windows"))]
+pub mod ocr_windows;
 
 // ---------------------------------------------------------------------------
 // Document — the unit of output
@@ -190,6 +194,11 @@ impl Engine {
     /// can log "PDF support disabled: libpdfium not found" rather
     /// than silently shipping a degraded experience.
     pub fn with_defaults_diagnostic() -> (Self, Vec<(&'static str, Error)>) {
+        // `mut` is conditionally needed: when --no-default-features is
+        // set and no optional backends are enabled, neither `engine`
+        // nor `errors` ever gets a mutating call. The allow keeps that
+        // valid configuration buildable under -D warnings.
+        #[allow(unused_mut)]
         let mut engine = Self::new();
         #[allow(unused_mut)]
         let mut errors: Vec<(&'static str, Error)> = Vec::new();
@@ -233,6 +242,15 @@ impl Engine {
         {
             // Vision is part of macOS — no init failure mode.
             engine.register(Box::new(crate::ocr_macos::VisionOcrExtractor::new()));
+        }
+
+        #[cfg(all(feature = "ocr-platform", target_os = "windows"))]
+        {
+            // Windows.Media.Ocr is part of Windows — no init failure
+            // at construction time. (Per-call init may still fail if
+            // the user has no OCR-capable language pack installed; we
+            // surface that as a typed error from `extract`.)
+            engine.register(Box::new(crate::ocr_windows::WindowsOcrExtractor::new()));
         }
 
         #[cfg(feature = "pandoc")]

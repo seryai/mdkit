@@ -23,9 +23,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           components: clippy, rustfmt
 
       - name: Cache cargo
@@ -58,11 +58,18 @@ jobs:
         run: cargo clippy --all-features --all-targets -- -D warnings
 
   msrv:
-    name: MSRV (rust 1.75)
+    # Bumped to 1.88 in v0.5.2: the dep tree pulls in
+    #   - indexmap 2.14 (via html2md / calamine / pdfium-render),
+    #     which requires `edition = "2024"` (Rust 1.85+)
+    #   - libloading 0.9 (via pdfium-render), which sets
+    #     `rust-version = "1.88"`.
+    # 1.88 is the floor that satisfies both. Bump as transitive deps
+    # raise their own MSRVs.
+    name: MSRV (rust 1.88)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - name: Build on MSRV
         run: cargo build --verbose
