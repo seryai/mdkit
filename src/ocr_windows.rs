@@ -48,7 +48,9 @@
 
 use crate::{Document, Error, Extractor, Result};
 use std::path::Path;
-use windows::core::HSTRING;
+use std::time::Duration;
+use windows::core::{RuntimeType, HSTRING};
+use windows::Foundation::{AsyncStatus, IAsyncOperation};
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::BitmapDecoder;
 use windows::Media::Ocr::OcrEngine;
@@ -87,6 +89,25 @@ impl Extractor for WindowsOcrExtractor {
         ensure_mta_initialized()?;
         extract_with_windows_ocr(path)
     }
+}
+
+/// Block the current thread until an `IAsyncOperation<T>` completes,
+/// then return its result. The `IAsyncOperation` API has a built-in
+/// `.get()` helper in some windows-future revisions but not all the
+/// 0.3.x line — we poll explicitly so the call works against the
+/// projection the umbrella `windows = "0.62"` crate exposes today.
+///
+/// One-millisecond sleep between polls keeps idle CPU near zero
+/// without adding meaningful latency to OCR (which itself takes
+/// hundreds of ms to seconds for typical pages).
+fn block_on<T>(op: IAsyncOperation<T>) -> windows::core::Result<T>
+where
+    T: RuntimeType + 'static,
+{
+    while op.Status()? == AsyncStatus::Started {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    op.GetResults()
 }
 
 /// Initialise the current thread's COM apartment as MTA. Idempotent
@@ -139,26 +160,26 @@ fn extract_with_windows_ocr(path: &Path) -> Result<Document> {
     //    SoftwareBitmap. Each `*Async()` returns an
     //    `IAsyncOperation<T>`; `.get()` blocks the current (MTA)
     //    thread until completion.
-    let file = StorageFile::GetFileFromPathAsync(&path_h)
-        .map_err(|e| Error::ParseError(format!("GetFileFromPathAsync failed: {e:?}")))?
-        .get()
+    let file_op = StorageFile::GetFileFromPathAsync(&path_h)
+        .map_err(|e| Error::ParseError(format!("GetFileFromPathAsync failed: {e:?}")))?;
+    let file = block_on(file_op)
         .map_err(|e| Error::ParseError(format!("StorageFile open await failed: {e:?}")))?;
 
-    let stream = file
+    let stream_op = file
         .OpenAsync(FileAccessMode::Read)
-        .map_err(|e| Error::ParseError(format!("StorageFile::OpenAsync failed: {e:?}")))?
-        .get()
+        .map_err(|e| Error::ParseError(format!("StorageFile::OpenAsync failed: {e:?}")))?;
+    let stream = block_on(stream_op)
         .map_err(|e| Error::ParseError(format!("stream open await failed: {e:?}")))?;
 
-    let decoder = BitmapDecoder::CreateAsync(&stream)
-        .map_err(|e| Error::ParseError(format!("BitmapDecoder::CreateAsync failed: {e:?}")))?
-        .get()
+    let decoder_op = BitmapDecoder::CreateAsync(&stream)
+        .map_err(|e| Error::ParseError(format!("BitmapDecoder::CreateAsync failed: {e:?}")))?;
+    let decoder = block_on(decoder_op)
         .map_err(|e| Error::ParseError(format!("BitmapDecoder await failed: {e:?}")))?;
 
-    let bitmap = decoder
+    let bitmap_op = decoder
         .GetSoftwareBitmapAsync()
-        .map_err(|e| Error::ParseError(format!("GetSoftwareBitmapAsync failed: {e:?}")))?
-        .get()
+        .map_err(|e| Error::ParseError(format!("GetSoftwareBitmapAsync failed: {e:?}")))?;
+    let bitmap = block_on(bitmap_op)
         .map_err(|e| Error::ParseError(format!("SoftwareBitmap await failed: {e:?}")))?;
 
     // 3. Build an OcrEngine. Prefer the user's installed profile
@@ -205,10 +226,10 @@ fn extract_with_windows_ocr(path: &Path) -> Result<Document> {
     //    OcrResult::Lines() yields an IVectorView<OcrLine>; each
     //    OcrLine carries the recognised text plus per-word bounding
     //    boxes (we surface only the text for now).
-    let result = engine
+    let result_op = engine
         .RecognizeAsync(&bitmap)
-        .map_err(|e| Error::ParseError(format!("OcrEngine::RecognizeAsync failed: {e:?}")))?
-        .get()
+        .map_err(|e| Error::ParseError(format!("OcrEngine::RecognizeAsync failed: {e:?}")))?;
+    let result = block_on(result_op)
         .map_err(|e| Error::ParseError(format!("OCR result await failed: {e:?}")))?;
 
     let lines = result
