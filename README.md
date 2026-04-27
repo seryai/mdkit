@@ -35,7 +35,7 @@ The composition we ship by default:
 |---|---|---|
 | DOCX, PPTX, EPUB, RTF, ODT, LaTeX | [Pandoc][pandoc] sidecar | Best-in-world conversion quality. ~150 MB but you bundle it once. |
 | PDF (text) | [`pdfium-render`][pdfium] | Google's Pdfium engine, in-process, layout-aware. ~5 MB. |
-| PDF (scanned) | Pdfium renders pages → platform OCR (Vision / Windows.Media.Ocr) | Composed automatically by `Engine::with_defaults` when both `pdf` and `ocr-platform` features are on. |
+| PDF (scanned + mixed-content) | Pdfium renders pages → platform OCR (Vision / Windows.Media.Ocr) | Per-page composition — pages with text pass through pdfium, empty pages get OCR'd. Auto-wired by `Engine::with_defaults` when both `pdf` and `ocr-platform` features are on. |
 | Standalone images | Platform-native OCR — Vision.framework on macOS, Windows.Media.Ocr on Windows, ONNX-based ([Surya][surya]) on Linux | OS-quality on Mac/Win for free. ONNX models on Linux. |
 | XLSX, XLS, ODS | [`calamine`][calamine] | Already the Rust ecosystem standard. |
 | CSV, TSV | [`csv`][csv] | Stdlib-quality. |

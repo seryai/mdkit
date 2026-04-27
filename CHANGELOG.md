@@ -11,6 +11,55 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-04-27
+
+### Added
+
+- **Mixed-content PDF OCR.** v0.5.0–v0.5.4 only triggered the OCR
+  fallback when the *whole* PDF returned empty text. Real-world PDFs
+  often mix text-bearing and scanned pages — a text body with a
+  scanned cover page, a mostly-scanned doc with a couple of typed
+  pages, etc. v0.5.5 switches to **per-page detection**: pages whose
+  pdfium text extraction comes back empty get rendered + OCR'd
+  individually, pages with text pass through unchanged.
+- **`PdfiumExtractor::render_pages_subset_to_pngs(path, indices,
+  out_dir)`** — render only the listed page indices (0-based) to
+  PNGs, sorted+deduped internally so output order is predictable
+  ascending-by-page-number. Used by the per-page OCR path so we
+  don't burn render time on pages that already have clean text.
+- New extracted-`Document` metadata key `pages_ocred` reports the
+  count of pages that went through OCR (1+ for mixed-content,
+  total-page-count for fully-scanned, absent for pure-text PDFs).
+
+### Changed
+
+- **`## Page N` heading layout activation rule.** Whenever any page
+  went through OCR (mixed-content or fully-scanned), the output is
+  now per-page-headed so OCR'd pages are visually distinguishable
+  and downstream readers can cite by page. Pure text-only PDFs keep
+  the simpler blank-line-between-pages layout that v0.2–v0.5.4 used,
+  preserving backward compat for callers whose snapshots / tests pin
+  that shape.
+- The internal `PdfiumExtractor::extract_via_ocr` fold-everything-into-
+  OCR helper from v0.5.3 has been removed. Its behavior is now
+  subsumed by the new per-page logic in `extract` (a fully-scanned
+  PDF has all pages flagged empty and follows the same path).
+  Externally observable behavior is unchanged for fully-scanned PDFs.
+
+### Notes
+
+- New ignored test `mixed_content_pdf_ocrs_only_empty_pages`
+  validates the contract end-to-end. Run with:
+  `cargo test --features "pdf ocr-platform" -- --ignored
+  mixed_content_pdf_ocrs_only_empty_pages` after dropping a 2+ page
+  PDF with at least one text page and at least one scanned page at
+  `tests/fixtures/mixed-content.pdf`.
+- The detection threshold remains `text.trim().is_empty()` per page.
+  Pages with even a single non-whitespace character are treated as
+  text-bearing — partial OCR-overlay (e.g. mixing pdfium text with
+  OCR'd text on the same page) is intentionally not done, since it
+  tends to produce duplicate or garbled output.
+
 ## [0.5.4] — 2026-04-27
 
 ### Added
@@ -365,7 +414,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/mdkit-project/mdkit/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/mdkit-project/mdkit/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...v0.5.2
