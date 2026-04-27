@@ -22,8 +22,12 @@ Thumbs.db
 *.swo
 *~
 
-# Local test fixtures (large binary files we don't want in git)
-/tests/fixtures/large/
+# Local test fixtures. Anything under tests/fixtures/ is considered
+# developer-local — drop your own hello.png / sample.pdf in here to
+# run the `--ignored` tests, but nothing in this directory ships with
+# the crate or gets committed. Force-add (`git add -f`) if we ever
+# want to commit a tiny canonical fixture.
+/tests/fixtures/
 
 # Coverage / profiling
 /coverage
