@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["mdkit contributors"]
@@ -28,8 +28,9 @@ calamine = []                       # placeholder; pulls in calamine in v0.4
 csv      = []                       # placeholder; pulls in csv in v0.4
 html     = []                       # placeholder; pulls in html2md in v0.4
 
-# Sidecar backend. Caller is responsible for shipping the Pandoc binary
-# and pointing mdkit at it via Engine::with_pandoc_binary(...).
+# Sidecar backend — shells out to the `pandoc` binary on PATH (or a
+# caller-provided absolute path via PandocExtractor::with_binary).
+# No Rust dependency needed; the binary itself is the dependency.
 pandoc   = []
 
 # OCR backends — pick one. Both can coexist; ocr-platform is preferred
