@@ -63,6 +63,15 @@ pub mod html;
 #[cfg(feature = "pandoc")]
 pub mod pandoc;
 
+// macOS Vision-based OCR. The module compiles only when both the
+// `ocr-platform` feature is enabled AND we're on macOS — because the
+// objc2-vision deps are macOS-only by definition. On Windows or
+// Linux with `ocr-platform` enabled, this module is absent and no
+// platform OCR extractor is registered (Windows lands in v0.5.x;
+// Linux uses the future `ocr-onnx` feature in v0.6).
+#[cfg(all(feature = "ocr-platform", target_os = "macos"))]
+pub mod ocr_macos;
+
 // ---------------------------------------------------------------------------
 // Document — the unit of output
 // ---------------------------------------------------------------------------
@@ -218,6 +227,12 @@ impl Engine {
         #[cfg(feature = "html")]
         {
             engine.register(Box::new(crate::html::Html2mdExtractor::new()));
+        }
+
+        #[cfg(all(feature = "ocr-platform", target_os = "macos"))]
+        {
+            // Vision is part of macOS — no init failure mode.
+            engine.register(Box::new(crate::ocr_macos::VisionOcrExtractor::new()));
         }
 
         #[cfg(feature = "pandoc")]

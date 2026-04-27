@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["mdkit contributors"]
@@ -35,7 +35,7 @@ pandoc   = []
 
 # OCR backends — pick one. Both can coexist; ocr-platform is preferred
 # at runtime when available (macOS / Windows), falling back to ocr-onnx.
-ocr-platform = []   # placeholder; macOS Vision + Windows.Media.Ocr in v0.5
+ocr-platform = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-vision"]
 ocr-onnx     = []   # placeholder; Surya/ONNX in v0.6
 
 # Build-everything convenience for downstream tests.
@@ -53,11 +53,26 @@ calamine      = { version = "0.34", optional = true }
 csv           = { version = "1", optional = true }
 html2md       = { version = "0.2", optional = true }
 
+# macOS Vision.framework OCR (gated by `ocr-platform` feature). The
+# objc2 ecosystem deps are macOS-only by definition; on other targets
+# the feature is a no-op (the module itself is gated by both feature
+# AND target_os, so no compile error on Linux / Windows).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2               = { version = "0.6", optional = true }
+objc2-foundation    = { version = "0.3", optional = true }
+objc2-app-kit       = { version = "0.3", optional = true, features = ["NSImage", "NSImageRep"] }
+objc2-core-graphics = { version = "0.3", optional = true }
+objc2-vision        = { version = "0.3", optional = true, features = ["alloc", "VNRequest", "VNRequestHandler", "VNRecognizeTextRequest", "VNObservation", "objc2-core-graphics"] }
+
 [dev-dependencies]
 tempfile = "3"
 
 [lints.rust]
-unsafe_code = "forbid"
+# `deny` (rather than `forbid`) so backends that legitimately need FFI
+# (the macOS Vision OCR module is the first such case) can opt in via
+# per-module #[allow(unsafe_code)] with a clear safety comment. Core
+# dispatch and trait-only backends remain unsafe-free.
+unsafe_code = "deny"
 missing_docs = "warn"
 
 [lints.clippy]

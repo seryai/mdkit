@@ -11,6 +11,52 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-04-27
+
+### Added
+
+- **`VisionOcrExtractor`** — macOS OCR via Apple's Vision framework
+  (`VNRecognizeTextRequest`). Neural-network-based, accelerated on
+  the Apple Neural Engine on Apple Silicon, handles handwriting and
+  mixed languages well, and ships free with every macOS install.
+  Gated by the `ocr-platform` feature; only present on macOS targets
+  (Windows + Linux are no-ops in v0.5; Windows lands in v0.5.x via
+  `Windows.Media.Ocr`, Linux in v0.6 via `ocr-onnx`).
+- Handles standalone image files: PNG, JPG/JPEG, TIFF/TIF, BMP, GIF,
+  HEIC/HEIF.
+- Auto-registration in `Engine::with_defaults` when both the
+  `ocr-platform` feature is enabled and the target is macOS.
+- Output is one line of markdown per Vision text observation, in
+  reading order. Confidence scores and bounding boxes are not
+  surfaced today (the `Extractor` trait surface stays simple); a
+  future "rich extraction" trait could expose them.
+- Runs inside an `autoreleasepool` so autoreleased Cocoa objects get
+  cleaned up promptly.
+
+### Changed
+
+- `[lints.rust] unsafe_code` downgraded from `forbid` to `deny`.
+  Backends with legitimate FFI needs (the macOS Vision module is
+  the first) can now opt in via per-module `#![allow(unsafe_code)]`
+  with a clear safety comment. Core dispatch and trait-only
+  backends remain unsafe-free.
+- Scanned-PDF OCR is **not** wired in v0.5 — `PdfiumExtractor`
+  still returns empty markdown for image-only PDFs. A future
+  release will detect the empty-result case and route through OCR
+  automatically.
+
+### Notes
+
+- `objc2-vision` is already partially safe in v0.6 — most calls to
+  Vision APIs don't require `unsafe`. The remaining `unsafe` block
+  is for `CGImageForProposedRect_context_hints`, which takes raw
+  `*mut NSRect` for the optional out-rect parameter.
+- `objc2-vision`, `objc2-app-kit`, `objc2-foundation`, and
+  `objc2-core-graphics` are pulled in only on macOS via a target-
+  specific dependency block, gated additionally by the
+  `ocr-platform` feature. Builds on Windows/Linux with
+  `--features ocr-platform` succeed but register no OCR extractor.
+
 ## [0.4.0] — 2026-04-27
 
 ### Added
@@ -144,7 +190,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdkit-project/mdkit/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mdkit-project/mdkit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mdkit-project/mdkit/compare/v0.1.0...v0.2.0

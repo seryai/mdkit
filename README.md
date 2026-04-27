@@ -4,13 +4,13 @@
 Tauri / Iced / native desktop apps that want best-in-class document
 extraction without a 350 MB Python sidecar.
 
-> **Status:** v0.4 — PDF (Pdfium), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
-> LaTeX), spreadsheets (calamine for XLSX/XLS/XLSB/XLSM/ODS), CSV/TSV,
-> and HTML (in-process via html2md, with Pandoc as fallback) all
-> shipped. The trait surface + dispatch engine are stable; OCR
-> backends land in v0.5/v0.6. Not yet recommended for production use,
-> but feature coverage is approaching parity with Python markitdown
-> for non-OCR formats. Watch / star the repo to follow along.
+> **Status:** v0.5 — PDF (Pdfium), Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
+> LaTeX), spreadsheets (calamine), CSV/TSV, HTML (html2md / Pandoc),
+> AND macOS image OCR via Apple's Vision framework. The trait
+> surface + dispatch engine are stable. Windows OCR lands in v0.5.x;
+> Linux OCR (ONNX-based) in v0.6. Feature coverage is at parity with
+> Python markitdown for non-audio formats on macOS. Watch / star the
+> repo to follow along.
 
 ## Why this exists
 
@@ -147,7 +147,11 @@ roadmap below:
       (CSV/TSV with auto-delimiter), `Html2mdExtractor` (HTML/HTM,
       registered before Pandoc so it wins by default for HTML).
       Engine registration order documented inline.
-- [ ] v0.5 — `ocr-platform` feature (macOS Vision, Windows.Media.Ocr)
+- [x] **v0.5 — `ocr-platform` feature (macOS Vision).**
+      `VisionOcrExtractor` for PNG / JPG / TIFF / BMP / GIF / HEIC.
+      Apple Vision is neural-network-based and Apple Neural Engine-
+      accelerated on Apple Silicon. Windows.Media.Ocr lands in
+      v0.5.x; Linux ONNX backend in v0.6.
 - [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
 - [ ] v0.7 — Audit pass + first stable trait release (1.0 candidate)
 
