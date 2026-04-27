@@ -1,6 +1,6 @@
 [package]
 name = "mdkit"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 rust-version = "1.75"
 authors = ["mdkit contributors"]
@@ -35,7 +35,7 @@ pandoc   = []
 
 # OCR backends — pick one. Both can coexist; ocr-platform is preferred
 # at runtime when available (macOS / Windows), falling back to ocr-onnx.
-ocr-platform = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-vision"]
+ocr-platform = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:objc2-core-graphics", "dep:objc2-vision", "dep:windows"]
 ocr-onnx     = []   # placeholder; Surya/ONNX in v0.6
 
 # Build-everything convenience for downstream tests.
@@ -63,6 +63,22 @@ objc2-foundation    = { version = "0.3", optional = true }
 objc2-app-kit       = { version = "0.3", optional = true, features = ["NSImage", "NSImageRep"] }
 objc2-core-graphics = { version = "0.3", optional = true }
 objc2-vision        = { version = "0.3", optional = true, features = ["alloc", "VNRequest", "VNRequestHandler", "VNRecognizeTextRequest", "VNObservation", "objc2-core-graphics"] }
+
+# Windows.Media.Ocr (gated by `ocr-platform` feature). The `windows`
+# crate is the official Microsoft windows-rs binding; it's Windows-only
+# by definition, so on other targets the feature is a no-op (the module
+# itself is gated by both feature AND target_os, so no compile error
+# on macOS / Linux).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", optional = true, features = [
+    "Storage",
+    "Storage_Streams",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Globalization",
+    "Foundation",
+    "Win32_System_WinRT",
+] }
 
 [dev-dependencies]
 tempfile = "3"

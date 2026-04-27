@@ -11,6 +11,48 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-04-27
+
+### Added
+
+- **`WindowsOcrExtractor`** — Windows OCR via the `Windows.Media.Ocr`
+  API (the `windows` crate, Microsoft's official windows-rs binding).
+  Uses the user's installed profile languages where possible, falls
+  back to en-US if no profile language has an OCR pack installed, and
+  surfaces a clear typed error pointing the user at *Settings → Time
+  & Language → Language → Optional features → OCR* when no language
+  pack is OCR-capable.
+- Handles standalone image files: PNG, JPG/JPEG, TIFF/TIF, BMP, GIF.
+  HEIC/HEIF are intentionally omitted — the Windows imaging stack
+  doesn't include them in the base OS, unlike macOS.
+- Auto-registration in `Engine::with_defaults` when both the
+  `ocr-platform` feature is enabled and the target is Windows.
+  Construction is infallible; per-call init may still surface as a
+  `ParseError` (no installed OCR language, image too large, STA
+  thread, etc.).
+- Windows OCR initialisation is per-thread MTA. The first `extract`
+  call on a thread runs `RoInitialize(MTA)`; if the thread is locked
+  into STA (typical UI/main threads), `extract` returns a typed
+  `ParseError` telling the caller to dispatch to a worker thread
+  (e.g. `tauri::async_runtime::spawn_blocking`).
+- `OcrEngine::MaxImageDimension` is checked up-front. Images
+  exceeding the cap (~2600 px on shipping Windows) return
+  `ParseError` with a clear message rather than a deep WinRT error.
+  Auto-downscale via `BitmapTransform` is planned for a follow-up.
+
+### Notes
+
+- The `windows` crate (`0.62`) is target-conditional and only pulled
+  in on Windows. `--features ocr-platform` builds on macOS / Linux
+  succeed with no-op behavior on those platforms (Linux gets ONNX
+  via `ocr-onnx` in v0.6).
+- README "platform-native OCR" line updated to reflect macOS + Windows
+  parity for v0.5.2.
+- This release was developed on macOS without a Windows host —
+  Windows compile-and-test validation happens via CI
+  (`ubuntu-latest`, `macos-latest`, `windows-latest` matrix builds
+  with `cargo test --all-features`).
+
 ## [0.5.1] — 2026-04-27
 
 ### Fixed
@@ -215,7 +257,8 @@ auxiliary types until 1.0 lands.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mdkit-project/mdkit/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/mdkit-project/mdkit/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mdkit-project/mdkit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mdkit-project/mdkit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdkit-project/mdkit/compare/v0.3.0...v0.4.0
