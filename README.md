@@ -133,15 +133,23 @@ Runnable example programs live in [`examples/`](examples/):
 
 - [`extract.rs`](examples/extract.rs) — print the extracted markdown
   for any document. Surfaces backend registration failures
-  (libpdfium / pandoc / etc.) at startup so missing runtime deps
-  are obvious. Run with:
+  (libpdfium / pandoc / etc.) at startup. Run with:
   ```bash
   cargo run --example extract -- /path/to/document.pdf
   cargo run --example extract --features pandoc -- /path/to/report.docx
   cargo run --example extract --features ocr-platform -- /path/to/scan.pdf
   ```
-
-More examples (`batch.rs`, `custom_extractor.rs`) land in v0.7.x.
+- [`batch.rs`](examples/batch.rs) — non-recursive folder → `.md`
+  batch converter. Run with:
+  ```bash
+  cargo run --example batch -- /path/to/folder /path/to/output
+  ```
+- [`custom_extractor.rs`](examples/custom_extractor.rs) —
+  implements the `Extractor` trait for a custom file format,
+  showing the registration pattern. Run with:
+  ```bash
+  cargo run --example custom_extractor -- /path/to/file.rot
+  ```
 
 ## License
 

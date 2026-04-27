@@ -11,6 +11,32 @@ auxiliary types until 1.0 lands.
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-04-27
+
+### Added
+
+- **`examples/batch.rs`** — non-recursive folder → `.md` files
+  batch converter. Skips files mdkit can't extract silently
+  (no noisy log per non-document file), reports a final
+  `N extracted, M skipped, K failed` summary, exits non-zero
+  on any failure for CI-friendly use. Pair with
+  [`scankit`](https://crates.io/crates/scankit) for recursive
+  walks with exclude-glob support.
+- **`examples/custom_extractor.rs`** — implements `Extractor`
+  for a deliberately silly ROT13 format to show the trait shape
+  without distracting from the registration pattern. Documents
+  the four mechanics that ARE realistic (claim extensions,
+  implement `extract`, optionally implement `extract_bytes`,
+  register with `Engine::register` — order matters for
+  overlapping extensions).
+
+### Notes
+
+- Two examples per release line up with the v0.7.x cadence —
+  small, additive, no API changes. Future v0.7.5+ might add
+  a streaming-extraction example once we have a real use case
+  for it.
+
 ## [0.7.3] — 2026-04-27
 
 ### Added
@@ -710,7 +736,8 @@ docs / API audit pass, then 1.0.
   + clippy + rustfmt + cargo-audit gates).
 - `CONTRIBUTING.md`, `SECURITY.md` for repo hygiene.
 
-[Unreleased]: https://github.com/seryai/mdkit/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/seryai/mdkit/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/seryai/mdkit/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/seryai/mdkit/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/seryai/mdkit/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/seryai/mdkit/compare/v0.7.0...v0.7.1
