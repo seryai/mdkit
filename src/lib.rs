@@ -51,6 +51,9 @@ pub use error::{Error, Result};
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
+#[cfg(feature = "pandoc")]
+pub mod pandoc;
+
 // ---------------------------------------------------------------------------
 // Document — the unit of output
 // ---------------------------------------------------------------------------
@@ -180,6 +183,16 @@ impl Engine {
                     engine.register(Box::new(ext));
                 }
                 Err(e) => errors.push(("pdf", e)),
+            }
+        }
+
+        #[cfg(feature = "pandoc")]
+        {
+            match crate::pandoc::PandocExtractor::new() {
+                Ok(ext) => {
+                    engine.register(Box::new(ext));
+                }
+                Err(e) => errors.push(("pandoc", e)),
             }
         }
 

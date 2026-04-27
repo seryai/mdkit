@@ -4,10 +4,11 @@
 Tauri / Iced / native desktop apps that want best-in-class document
 extraction without a 350 MB Python sidecar.
 
-> **Status:** v0.2 — first real backend (PDF via Pdfium) shipped. The
-> trait surface + dispatch engine are stable; remaining backends land
-> incrementally per the roadmap below. Not yet recommended for
-> production use. Watch / star the repo to follow along.
+> **Status:** v0.3 — PDF (Pdfium) and Pandoc (DOCX/PPTX/EPUB/RTF/ODT/
+> LaTeX/HTML) backends shipped. The trait surface + dispatch engine
+> are stable; OCR + spreadsheet backends land incrementally per the
+> roadmap below. Not yet recommended for production use. Watch / star
+> the repo to follow along.
 
 ## Why this exists
 
@@ -134,7 +135,11 @@ roadmap below:
       registers automatically in `Engine::with_defaults()`; falls back
       gracefully when libpdfium isn't installed. See `src/pdf.rs` for
       libpdfium installation notes.
-- [ ] v0.3 — `pandoc` feature (sidecar wrapper, format detection)
+- [x] **v0.3 — `pandoc` feature.** `PandocExtractor` covers DOCX, PPTX,
+      EPUB, RTF, ODT, LaTeX, HTML via the `pandoc` binary. Auto-
+      registers when `pandoc` is on PATH; supports
+      `with_binary(absolute_path)` for shipping pandoc next to your
+      app. CHANGELOG.md added.
 - [ ] v0.4 — `calamine` + `csv` + `html` features (in-process)
 - [ ] v0.5 — `ocr-platform` feature (macOS Vision, Windows.Media.Ocr)
 - [ ] v0.6 — `ocr-onnx` feature (Surya + ONNX runtime fallback)
